@@ -1,0 +1,58 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDE & OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Large binaries & transient meteorological data
+data/**/*.h5
+data/**/*.hdf5
+data/**/*.nc
+data/**/*.nc4
+data/raw/*
+data/processed/*
+!data/raw_netcdf/.gitkeep
+!data/processed/.gitkeep
+*.log
+*.tmp
+temp/
+.tempmediaStorage/

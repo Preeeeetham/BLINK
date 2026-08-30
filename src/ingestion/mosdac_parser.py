@@ -186,6 +186,29 @@ class SyntheticMOSDACSimulator:
     """
 
     @staticmethod
+    def _fractal_noise(x_norm, y_norm, octaves=6, persistence=0.5, seed_offset=0.0):
+        """
+        Multi-octave fractal noise using layered sinusoidal harmonics.
+        Produces turbulent, cloud-like texture without external libraries.
+        """
+        noise = np.zeros_like(x_norm)
+        amplitude = 1.0
+        frequency = 1.0
+        max_amplitude = 0.0
+        for i in range(octaves):
+            # Use prime-number-offset frequencies for non-repeating patterns
+            fx = frequency * 7.13 + seed_offset
+            fy = frequency * 5.97 + seed_offset * 0.7
+            phase1 = np.sin(x_norm * fx + y_norm * fy * 1.31 + i * 2.17) 
+            phase2 = np.cos(x_norm * fy * 0.89 - y_norm * fx * 1.07 + i * 3.91)
+            phase3 = np.sin((x_norm + y_norm) * fx * 0.67 + i * 1.43)
+            noise += amplitude * (phase1 * 0.5 + phase2 * 0.35 + phase3 * 0.15)
+            max_amplitude += amplitude
+            amplitude *= persistence
+            frequency *= 2.03
+        return noise / max_amplitude
+
+    @staticmethod
     def generate_cyclone_frame(
         grid_size: Tuple[int, int] = (512, 512),
         t_normalized: float = 0.0,
@@ -196,63 +219,129 @@ class SyntheticMOSDACSimulator:
     ) -> Dict[str, np.ndarray]:
         """
         Simulates realistic INSAT-3DS TIR-1 / Multi-Spectral cyclone imagery
-        with multi-scale spiral rainbands, eyewall convection, cirrus outflow,
-        and landmass temperature contrasts.
+        with multi-octave fractal turbulent cloud texture, asymmetric spiral
+        rainbands, messy eyewall convection, warm-core eye anomaly, cirrus
+        outflow canopy, and realistic background ocean/land thermal structure.
         """
         h, w = grid_size
         y, x = np.mgrid[0:h, 0:w].astype(np.float32)
 
-        # Normalized coordinates [-1, 1] relative to center
+        # Normalized coordinates [-1, 1] relative to drifting center
         cx = center[0] + drift_velocity[0] * t_normalized
         cy = center[1] + drift_velocity[1] * t_normalized
-
         x_norm = (x / w - cx) * 2.0
         y_norm = (y / h - cy) * 2.0
-
         r = np.sqrt(x_norm**2 + y_norm**2) + 1e-6
         theta = np.arctan2(y_norm, x_norm)
 
-        # Dynamic vortex rotation with differential velocity profile
-        v_tan = (rotation_rate * 2.0 * np.pi) * (r / (r**1.8 + 0.08))
+        # ── Fractal turbulent cloud texture (6-octave) ──
+        turb = SyntheticMOSDACSimulator._fractal_noise(
+            x_norm * 3.5, y_norm * 3.5, octaves=6, persistence=0.52, seed_offset=t_normalized * 2.0
+        )
+        fine_turb = SyntheticMOSDACSimulator._fractal_noise(
+            x_norm * 8.0, y_norm * 8.0, octaves=4, persistence=0.45, seed_offset=t_normalized * 3.0 + 17.0
+        )
+
+        # ── Differential vortex rotation (Rankine-like profile) ──
+        r_max_wind = 0.12  # radius of maximum wind
+        v_tan = np.where(
+            r < r_max_wind,
+            rotation_rate * 2.0 * np.pi * (r / r_max_wind),
+            rotation_rate * 2.0 * np.pi * (r_max_wind / r) ** 0.55
+        )
         rot = theta + v_tan * t_normalized
 
-        # Multi-scale logarithmic spiral rainbands
-        spiral_1 = np.sin(3.5 * np.log(r * 3.0 + 0.1) - rot * 1.6)
-        spiral_2 = np.sin(5.0 * np.log(r * 4.0 + 0.15) - rot * 1.8 + 1.2)
-        spiral_3 = np.sin(2.0 * np.log(r * 2.0 + 0.05) - rot * 1.2 + 2.5)
+        # ── Asymmetric multi-scale logarithmic spiral rainbands ──
+        # Asymmetry: enhanced bands in the NE and SW quadrants (realistic for Bay of Bengal cyclones)
+        asymmetry = 1.0 + 0.35 * np.cos(theta - 0.8) + 0.2 * np.cos(2.0 * theta + 1.5)
 
-        # High-frequency turbulence / cloud clumping texture
-        noise_1 = np.sin(18.0 * x_norm + 14.0 * y_norm - rot * 3.0) * 0.15
-        noise_2 = np.cos(32.0 * x_norm - 28.0 * y_norm + rot * 2.0) * 0.10
-        noise_3 = np.sin(55.0 * x_norm * y_norm) * 0.08
+        spiral_1 = np.sin(3.5 * np.log(r * 3.0 + 0.1) - rot * 1.6 + turb * 0.8)
+        spiral_2 = np.sin(5.0 * np.log(r * 4.0 + 0.15) - rot * 1.8 + 1.2 + turb * 0.5)
+        spiral_3 = np.sin(2.0 * np.log(r * 2.0 + 0.05) - rot * 1.2 + 2.5 + turb * 0.3)
+        spiral_4 = np.sin(7.0 * np.log(r * 5.0 + 0.2) - rot * 2.1 + 0.7) * 0.4
 
-        # Radial envelope for spiral bands
-        envelope = np.exp(-1.6 * (r - 0.22) ** 2) * np.clip(1.0 - r * 0.7, 0.0, 1.0)
-        spiral_composite = (spiral_1 * 0.55 + spiral_2 * 0.30 + spiral_3 * 0.25 + noise_1 + noise_2 + noise_3)
-        spiral_clouds = np.clip(spiral_composite * envelope * intensity, -0.2, 1.2)
+        # Radial envelope — asymmetric, with extended outer bands
+        envelope_inner = np.exp(-2.0 * (r - 0.18) ** 2) * np.clip(1.0 - r * 0.5, 0.0, 1.0)
+        envelope_outer = np.exp(-0.8 * (r - 0.40) ** 2) * np.clip(1.0 - r * 0.35, 0.0, 1.0) * 0.6
 
-        # Dense central overcast (CDO) and well-defined eye
-        eye_radius = 0.045
-        eye_wall_width = 0.035
+        spiral_composite = (
+            spiral_1 * 0.45 + spiral_2 * 0.25 + spiral_3 * 0.20 + spiral_4 * 0.15
+            + turb * 0.25 + fine_turb * 0.12
+        )
+        spiral_clouds = np.clip(
+            spiral_composite * (envelope_inner + envelope_outer) * intensity * asymmetry,
+            -0.15, 1.3
+        )
+
+        # ── Dense Central Overcast (CDO) with turbulent eyewall ──
+        eye_radius = 0.04 + 0.008 * np.sin(theta * 3.0 + t_normalized * 5.0)  # wobbly eye
+        eye_wall_width = 0.03
         eye_mask = np.clip((r - eye_radius) / eye_wall_width, 0.0, 1.0)
-        cdo_core = np.exp(-12.0 * r**2) * eye_mask * 1.1
 
-        # Outflow cirrus canopy (wispy radial streaks)
-        cirrus = np.sin(12.0 * theta + 4.0 * r - rot) * np.exp(-2.0 * (r - 0.5)**2) * 0.22
+        # Eyewall convective bursts — hot towers at irregular positions
+        eyewall_ring = np.exp(-((r - 0.065) ** 2) / 0.0008)
+        eyewall_bursts = eyewall_ring * (
+            1.0 + 0.5 * np.sin(theta * 5.0 + t_normalized * 8.0)
+            + 0.3 * np.sin(theta * 8.0 - t_normalized * 12.0)
+            + turb * 0.4
+        )
 
-        # Background synoptic cloud cover and frontal bands across Indian Ocean
-        synoptic_flow = np.sin(x_norm * 2.5 + y_norm * 1.8 + t_normalized * 0.8) * 0.20
-        synoptic_cirrus = np.cos(x_norm * 4.2 - y_norm * 3.1 + t_normalized * 0.6) * 0.15
-        cumulus_field = np.maximum(0.0, np.sin(x_norm * 9.0 + y_norm * 8.0) * np.cos(x_norm * 12.0 - y_norm * 10.0)) * 0.25
+        cdo_core = np.exp(-10.0 * r**2) * eye_mask * 1.15 + eyewall_bursts * 0.4
 
-        # Combined cloud density [0.0, 1.0]
-        cloud_field = np.clip(cdo_core * 1.2 + spiral_clouds * 0.85 + cirrus + synoptic_flow + synoptic_cirrus + cumulus_field, 0.0, 1.0)
-        cloud_field = np.power(cloud_field, 0.75)  # High contrast cloud edges
+        # ── Warm-core eye anomaly (warmer brightness temp inside the eye) ──
+        eye_warmth = np.exp(-((r / (eye_radius.mean() * 0.7)) ** 2.5)) * (1.0 - eye_mask) * 0.45
 
-        # Background ocean / land thermal structure
-        tir1 = (302.0 - cloud_field * 115.0).astype(np.float32)  # Cold cloud tops ~187K, warm ocean ~302K
-        vis = (cloud_field * 95.0 + 5.0).astype(np.float32)        # High reflectance for dense clouds
-        wv = (265.0 - cloud_field * 58.0).astype(np.float32)       # Deep troposphere moisture
+        # ── Outflow cirrus canopy (wispy radial streaks with turbulence) ──
+        cirrus = (
+            np.sin(12.0 * theta + 4.0 * r - rot + turb * 1.5)
+            * np.exp(-1.8 * (r - 0.5)**2) * 0.25
+            + np.sin(8.0 * theta - 3.0 * r + rot * 0.5 + fine_turb * 2.0)
+            * np.exp(-2.5 * (r - 0.65)**2) * 0.15
+        )
+
+        # ── Outer feeder bands (large-scale, asymmetric) ──
+        feeder_1 = np.maximum(0.0, np.sin(
+            2.5 * np.log(r * 1.5 + 0.08) - rot * 0.8 + turb * 0.6
+        )) * np.exp(-1.5 * (r - 0.55) ** 2) * 0.35 * asymmetry
+        feeder_2 = np.maximum(0.0, np.sin(
+            x_norm * 3.0 + y_norm * 2.0 + t_normalized * 0.8
+        )) * np.exp(-3.0 * r) * 0.15
+
+        # ── Realistic spatial bounding & decay ──
+        # Storm system is centered in the basin; outer basin and continental landmass have clear skies
+        storm_envelope = np.exp(-1.4 * (r - 0.22) ** 2) * np.clip(1.35 - r * 0.85, 0.0, 1.0)
+
+        raw_cloud = (
+            cdo_core * 1.20
+            + spiral_clouds * 0.85
+            + cirrus * 0.75
+            + feeder_1 * 0.65 + feeder_2 * 0.45
+            + fine_turb * 0.04
+        )
+        # Apply storm envelope so clouds don't blanket the entire continent/ocean
+        cloud_field = np.clip(raw_cloud, 0.0, 1.3) * storm_envelope
+
+        # Subtle localized cumulus only in warm moist ocean sectors
+        cumulus_noise = np.maximum(0.0, np.sin(x_norm * 8.0 + y_norm * 7.0 + fine_turb * 2.0) * np.cos(x_norm * 11.0 - y_norm * 9.0) - 0.2) * 0.25
+        isolated_cumulus = cumulus_noise * np.clip(0.85 - r * 0.7, 0.0, 0.4)
+        cloud_field = np.clip(cloud_field + isolated_cumulus, 0.0, 1.0)
+
+        # Zero floor for clear skies so landmass and ocean underneath are 100% visible
+        cloud_field = np.where(cloud_field < 0.07, 0.0, cloud_field)
+        cloud_field = np.power(cloud_field, 0.75)
+
+        # ── Physical channel synthesis ──
+        # TIR-1: Cold cloud tops ~187K, warm ocean ~302K, warm eye ~280K
+        tir1 = (302.0 - cloud_field * 115.0 + eye_warmth * 40.0).astype(np.float32)
+        tir1 = np.clip(tir1, 185.0, 310.0)
+
+        # VIS: High reflectance for dense clouds, dark ocean
+        vis = (cloud_field * 92.0 + 5.0).astype(np.float32)
+        vis = np.clip(vis, 2.0, 100.0)
+
+        # WV: Deep troposphere moisture tracking
+        wv = (265.0 - cloud_field * 58.0 + turb * 3.0 * storm_envelope).astype(np.float32)
+        wv = np.clip(wv, 195.0, 275.0)
 
         return {"IMG_VIS": vis, "IMG_WV": wv, "IMG_TIR1": tir1}
 
@@ -263,7 +352,8 @@ class SyntheticMOSDACSimulator:
     ) -> Dict[str, np.ndarray]:
         """
         Simulates explosive convective cloudburst with multi-cell updraft towers,
-        rapid cirrus anvil expansion, overshooting tops (<205 K), and feeder inflow bands.
+        rapid cirrus anvil expansion, overshooting tops (<205 K), feeder inflow bands,
+        and turbulent cloud texture for realistic satellite appearance.
         """
         h, w = grid_size
         y, x = np.mgrid[0:h, 0:w].astype(np.float32)
@@ -275,28 +365,59 @@ class SyntheticMOSDACSimulator:
         r = np.sqrt(x_norm**2 + y_norm**2) + 1e-6
         theta = np.arctan2(y_norm, x_norm)
 
+        # Fractal turbulence for realistic cloud texture
+        turb = SyntheticMOSDACSimulator._fractal_noise(
+            x_norm * 4.0, y_norm * 4.0, octaves=5, persistence=0.50, seed_offset=t_normalized * 3.0 + 7.0
+        )
+        fine_turb = SyntheticMOSDACSimulator._fractal_noise(
+            x_norm * 10.0, y_norm * 10.0, octaves=4, persistence=0.42, seed_offset=t_normalized * 4.0 + 23.0
+        )
+
         # Rapid radial anvil expansion (growing 2.5x over the 15-min interval)
         current_radius = 0.18 + 0.32 * t_normalized
-        core_growth = np.exp(-((r / current_radius) ** 2.2))
+        # Irregular anvil edge with turbulence
+        edge_wobble = 1.0 + turb * 0.15 + 0.08 * np.sin(theta * 6.0 + t_normalized * 3.0)
+        core_growth = np.exp(-((r / (current_radius * edge_wobble)) ** 2.0))
 
-        # Overshooting convective tops (intense cold peaks inside the core)
-        ot1 = np.exp(-((x_norm + 0.04)**2 + (y_norm - 0.03)**2) / 0.008) * 1.3
-        ot2 = np.exp(-((x_norm - 0.08)**2 + (y_norm + 0.05)**2) / 0.012) * 1.1
-        ot_peaks = ot1 + ot2
+        # Multiple overshooting convective tops (intense cold peaks)
+        ot1 = np.exp(-((x_norm + 0.04)**2 + (y_norm - 0.03)**2) / 0.006) * 1.4
+        ot2 = np.exp(-((x_norm - 0.08)**2 + (y_norm + 0.05)**2) / 0.010) * 1.2
+        ot3 = np.exp(-((x_norm + 0.02)**2 + (y_norm + 0.08)**2) / 0.008) * 0.9
+        ot_peaks = ot1 + ot2 + ot3
 
-        # Anvil gravity wave ripples and cirrus outflow plumes
-        ripples = 0.18 * np.sin(16.0 * r - 6.0 * t_normalized + 3.0 * theta) * core_growth
-        feeder_bands = np.maximum(0.0, np.sin(x_norm * 6.0 + y_norm * 4.0 - t_normalized * 1.5)) * 0.35 * np.exp(-r * 1.5)
+        # Anvil gravity wave ripples and cirrus outflow plumes with texture
+        ripples = 0.20 * np.sin(16.0 * r - 6.0 * t_normalized + 3.0 * theta + turb * 2.0) * core_growth
+        feeder_bands = (
+            np.maximum(0.0, np.sin(x_norm * 6.0 + y_norm * 4.0 - t_normalized * 1.5 + turb * 0.8))
+            * 0.35 * np.exp(-r * 1.3)
+        )
 
-        # Surrounding ambient cumulus & cirrus field
-        ambient_clouds = np.maximum(0.0, np.sin(x / w * 14.0 + y / h * 12.0) * np.cos(x / w * 18.0)) * 0.20
+        # Multi-cell structure within the anvil
+        cells = (
+            np.sin(x_norm * 15.0 + turb * 3.0) * np.cos(y_norm * 13.0 + fine_turb * 2.5)
+            * core_growth * 0.15
+        )
 
-        density = np.clip(core_growth * 0.95 + ot_peaks * 0.35 + ripples + feeder_bands + ambient_clouds, 0.0, 1.0)
-        density = np.power(density, 0.8)
+        # Bounded convective cloudburst: localized to storm cell and expanding anvil
+        storm_mask = np.clip(core_growth * 1.3 + np.exp(-r * 1.5) * 0.4, 0.0, 1.0)
+        density = np.clip(
+            core_growth * 0.95
+            + ot_peaks * 0.40
+            + ripples
+            + feeder_bands * 0.5
+            + cells * 0.4
+            + fine_turb * 0.04,
+            0.0, 1.0
+        ) * storm_mask
+        density = np.where(density < 0.06, 0.0, density)
+        density = np.power(density, 0.78)
 
-        vis = (density * 96.0 + 4.0).astype(np.float32)
-        tir1 = (305.0 - density * 120.0).astype(np.float32)  # Overshooting tops reach down to 185 K
-        wv = (268.0 - density * 62.0).astype(np.float32)
+        vis = (density * 94.0 + 4.0).astype(np.float32)
+        vis = np.clip(vis, 2.0, 100.0)
+        tir1 = (305.0 - density * 120.0).astype(np.float32)
+        tir1 = np.clip(tir1, 182.0, 310.0)
+        wv = (268.0 - density * 62.0 + turb * 2.5 * storm_mask).astype(np.float32)
+        wv = np.clip(wv, 195.0, 275.0)
 
         return {"IMG_VIS": vis, "IMG_WV": wv, "IMG_TIR1": tir1}
 

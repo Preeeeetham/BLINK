@@ -3,7 +3,6 @@
 **The Complete Technical & Operational Reference for Zero-Payload Rapid Satellite Nowcasting**
 
 ---
-
 ## 1. The Core Problem: The 15-Minute Satellite Blindspot
 
 ### 1.1 The Orbital Challenge

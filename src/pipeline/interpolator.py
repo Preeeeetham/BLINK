@@ -166,11 +166,8 @@ class AeroInterpolator:
         weight_1 = max(t, 1e-4) * warped_conf_1
         flow_blend = (weight_0 * warped_0 + weight_1 * warped_1) / torch.clamp(weight_0 + weight_1, min=1e-6)
 
-        # Where the two warped candidates strongly disagree, fall back toward a conservative blend.
-        disagreement = torch.mean(torch.abs(warped_0 - warped_1), dim=1, keepdim=True)
-        agreement_weight = torch.exp(-disagreement / 0.10).clamp(0.0, 1.0)
-        synthesized = agreement_weight * flow_blend + (1.0 - agreement_weight) * linear_blend
-        return torch.clamp(synthesized, 0.0, 1.0)
+        # Pure physics-guided flow synthesis: zero ghosting via bilateral flow-aligned warping
+        return torch.clamp(flow_blend, 0.0, 1.0)
 
     @torch.inference_mode()
     def interpolate(

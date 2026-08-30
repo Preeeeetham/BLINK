@@ -329,14 +329,30 @@ class StormTrackPredictor:
 
         # Landfall estimation based on 24h forecasted waypoint
         target_lat = waypoints[3].lat
-        if target_lat > 19.5:
-            coast_name = "Odisha - West Bengal Coast (Gopalpur to Paradip)"
-        elif target_lat > 16.0:
-            coast_name = "Andhra Pradesh Coast (Visakhapatnam to Kakinada)"
-        elif target_lat > 12.0:
-            coast_name = "Tamil Nadu Coast (Chennai to Cuddalore)"
+        target_lon = waypoints[3].lon
+
+        if target_lat >= 26.0:
+            coast_name = "Himalayan Ridge / Foothills Orographic Zone"
+        elif target_lon < 77.5:
+            # Arabian Sea and Western Ghats / West Coast of India
+            if target_lat > 21.0:
+                coast_name = "Gujarat Coast (Saurashtra & Gulf of Kutch)"
+            elif target_lat > 17.5:
+                coast_name = "Maharashtra - Konkan Coast (Mumbai to Ratnagiri)"
+            elif target_lat > 13.5:
+                coast_name = "Goa - Karnataka Coast (Karwar to Mangalore)"
+            else:
+                coast_name = "Kerala Coast (Kochi to Kannur)"
         else:
-            coast_name = "Maritime Region / Coastal Inflow"
+            # Bay of Bengal and East Coast of India
+            if target_lat > 20.5:
+                coast_name = "Odisha - West Bengal Coast (Gopalpur to Paradip)"
+            elif target_lat > 15.5:
+                coast_name = "Andhra Pradesh Coast (Visakhapatnam to Machilipatnam)"
+            elif target_lat > 10.0:
+                coast_name = "Tamil Nadu Coast (Chennai to Nagapattinam)"
+            else:
+                coast_name = "Sri Lanka / Gulf of Mannar Maritime Inflow"
 
         landfall = {
             "estimated_region": coast_name,

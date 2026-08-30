@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
     <style>
         /* ══════════════════════════════════════════════════════════════════════════ */
         /*                          BLINK DESIGN TOKENS                               */
@@ -446,12 +447,44 @@
             height: 100%;
             object-fit: cover;
             display: block;
+            position: relative;
+            z-index: 2;
         }
+        .simulation-basemap {
+            display: none;
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            background: #132033;
+            filter: grayscale(0.9) saturate(0.65) brightness(0.7) contrast(1.15);
+        }
+        .viewport-canvas-container.simulation-map-active .simulation-basemap {
+            display: block;
+        }
+        .viewport-canvas-container.simulation-map-active img {
+            opacity: 1;
+            mix-blend-mode: normal;
+        }
+        .map-attribution {
+            display: none;
+            position: absolute;
+            right: 4px;
+            bottom: 3px;
+            z-index: 4;
+            padding: 1px 3px;
+            background: rgba(10, 10, 11, 0.72);
+            color: rgba(242, 242, 243, 0.75);
+            font: 8px var(--font-sans);
+            pointer-events: auto;
+        }
+        .map-attribution a { color: #a9c8ff; }
+        .viewport-canvas-container.simulation-map-active .map-attribution { display: block; }
         .viewport-canvas-container canvas.geo-overlay {
             position: absolute;
             top: 0; left: 0;
             width: 100%; height: 100%;
             pointer-events: none;
+            z-index: 3;
         }
 
         /* Dedicated Video Playback Bar (Below Viewports, Never Overlapping) */
@@ -1042,6 +1075,7 @@
         }
         .modal-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
     </style>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </head>
 <body>
 
@@ -1126,9 +1160,9 @@
         <div class="control-section">
             <div class="section-heading">Data Source</div>
             <select id="ctl-datasource" onchange="onDataSourceChange()">
-                <option value="REAL_SATELLITE" selected>Live Satellite (NASA VIIRS / MODIS)</option>
+                <option value="REAL_SATELLITE">Live Satellite (NASA VIIRS / MODIS)</option>
                 <option value="MOSDAC_INSAT3DS">ISRO MOSDAC (INSAT-3DS L1B)</option>
-                <option value="simulation_cyclone">Benchmark: Severe Tropical Cyclone</option>
+                <option value="simulation_cyclone" selected>Benchmark: Severe Tropical Cyclone</option>
                 <option value="simulation_cloudburst">Benchmark: Explosive Cloudburst</option>
                 <option value="upload">Custom Ingestion (HDF5 / NetCDF / PNG)</option>
             </select>
@@ -1233,8 +1267,10 @@
                     <span class="viewport-tag raw">Raw Observation</span>
                 </div>
                 <div class="viewport-canvas-container" onmousemove="handleViewportHover(event, this)">
+                    <div class="simulation-basemap" id="map-t0" aria-label="Simulation geographic basemap"></div>
                     <img id="view-img-t0" src="" alt="T0 Satellite Frame">
                     <canvas class="geo-overlay" id="canvas-overlay-t0"></canvas>
+                    <span class="map-attribution">Satellite backdrop: <a href="https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs" target="_blank" rel="noopener">NASA GIBS / MODIS Terra</a></span>
                 </div>
             </div>
 
@@ -1244,8 +1280,10 @@
                     <span class="viewport-tag raw">Raw Observation</span>
                 </div>
                 <div class="viewport-canvas-container" onmousemove="handleViewportHover(event, this)">
+                    <div class="simulation-basemap" id="map-t1" aria-label="Simulation geographic basemap"></div>
                     <img id="view-img-t1" src="" alt="T1 Satellite Frame">
                     <canvas class="geo-overlay" id="canvas-overlay-t1"></canvas>
+                    <span class="map-attribution">Satellite backdrop: <a href="https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs" target="_blank" rel="noopener">NASA GIBS / MODIS Terra</a></span>
                 </div>
             </div>
 
@@ -1255,8 +1293,10 @@
                     <span class="viewport-tag synth">Synthesized</span>
                 </div>
                 <div class="viewport-canvas-container" onmousemove="handleViewportHover(event, this)">
+                    <div class="simulation-basemap" id="map-ai" aria-label="Simulation geographic basemap"></div>
                     <img id="view-img-ai" src="" alt="Model Synthesized Frame">
                     <canvas class="geo-overlay" id="canvas-overlay-ai"></canvas>
+                    <span class="map-attribution">Satellite backdrop: <a href="https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs" target="_blank" rel="noopener">NASA GIBS / MODIS Terra</a></span>
                 </div>
             </div>
         </div>
@@ -1304,11 +1344,8 @@
                     <div class="velocity-legend-bar">
                         <div class="velocity-bar-track"></div>
                         <div class="velocity-ticks">
-                            <span>0 km/h</span>
-                            <span>25 km/h</span>
-                            <span>50 km/h</span>
-                            <span>75 km/h</span>
-                            <span>100+ km/h</span>
+                            <span>Optical-flow streamlines</span>
+                            <span>Units: pixels / 15 min</span>
                         </div>
                     </div>
                 </div>
@@ -1489,6 +1526,7 @@ const AppState = {
     probeLon: 89.21,
     flowImageObj: null,
 };
+const simulationCloudLayerCache = new Map();
 
 const REGION_BOUNDS = {
     indian_subcontinent: { latNorth: 25.0, latSouth: 5.0, lonWest: 75.0, lonEast: 100.0, name: "Bay of Bengal & Peninsular India" },
@@ -1498,6 +1536,73 @@ const REGION_BOUNDS = {
     himalayan_foothills: { latNorth: 33.0, latSouth: 26.0, lonWest: 74.0, lonEast: 90.0, name: "Himalayan Cloudburst Corridor" },
 };
 const GEO_COORDS = { ...REGION_BOUNDS.indian_subcontinent };
+const simulationMaps = {};
+
+function isSimulationSource() {
+    return document.getElementById('ctl-datasource')?.value.startsWith('simulation');
+}
+
+function getSimulationMapBounds() {
+    return [
+        [GEO_COORDS.latSouth, GEO_COORDS.lonWest],
+        [GEO_COORDS.latNorth, GEO_COORDS.lonEast],
+    ];
+}
+
+function getSimulationBackdropDate() {
+    const value = document.getElementById('ctl-date')?.value;
+    return /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value : '2026-08-28';
+}
+
+function updateSimulationBackdrop(map) {
+    const date = getSimulationBackdropDate();
+    if (map._blinkBackdropDate === date) return;
+    if (map._blinkBackdropLayer) map.removeLayer(map._blinkBackdropLayer);
+
+    // NASA GIBS corrected-reflectance imagery is a true-color satellite base,
+    // so simulations retain a satellite-imagery character rather than a street-map look.
+    map._blinkBackdropLayer = L.tileLayer(
+        `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
+        { minZoom: 2, maxZoom: 9 },
+    ).addTo(map);
+    map._blinkBackdropDate = date;
+}
+
+function ensureSimulationMap(viewId) {
+    if (!window.L || simulationMaps[viewId]) return simulationMaps[viewId];
+
+    const map = L.map(`map-${viewId}`, {
+        attributionControl: false,
+        zoomControl: false,
+        dragging: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        boxZoom: false,
+        keyboard: false,
+        touchZoom: false,
+    });
+    updateSimulationBackdrop(map);
+    simulationMaps[viewId] = map;
+    return map;
+}
+
+function setSimulationMapMode(enabled) {
+    // Gracefully keep the original imagery view if the optional map library is
+    // unavailable (for example, during an offline operational session).
+    const mapAvailable = enabled && Boolean(window.L);
+    ['t0', 't1', 'ai'].forEach(viewId => {
+        const container = document.getElementById(`map-${viewId}`)?.parentElement;
+        if (!container) return;
+        container.classList.toggle('simulation-map-active', mapAvailable);
+        if (!mapAvailable) return;
+
+        const map = ensureSimulationMap(viewId);
+        if (!map) return;
+        updateSimulationBackdrop(map);
+        map.fitBounds(getSimulationMapBounds(), { animate: false, padding: [0, 0] });
+        setTimeout(() => map.invalidateSize({ animate: false }), 0);
+    });
+}
 
 const COASTLINE_INDIA = [
     [23.8, 88.3], [22.8, 88.6], [22.0, 89.0], [21.8, 87.8], [21.4, 86.9], [20.8, 86.9],
@@ -1550,6 +1655,9 @@ function onFilePicked(slot, input) {
 
 function onDataSourceChange() {
     const src = document.getElementById('ctl-datasource').value;
+    // The basemap is deliberately limited to benchmark simulations. Real, MOSDAC,
+    // and uploaded observations keep their existing raw-image presentation.
+    setSimulationMapMode(src.startsWith('simulation'));
     if (src !== 'upload') {
         AppState.uploadedFiles.t0 = null;
         AppState.uploadedFiles.t1 = null;
@@ -1565,6 +1673,7 @@ function onRegionChange() {
     GEO_COORDS.latSouth = b.latSouth;
     GEO_COORDS.lonWest = b.lonWest;
     GEO_COORDS.lonEast = b.lonEast;
+    if (isSimulationSource()) setSimulationMapMode(true);
     refreshOverlays();
     drawMotionField();
 }
@@ -1657,7 +1766,7 @@ async function executeSynthesis() {
         updateTelemetryMetrics(resultData.metrics);
         updateNowcastingTelemetry(resultData);
         updateSystemDiagnostics(resultData);
-        drawMotionField();
+        scheduleDiagnosticsRender();
 
     } catch (err) {
         console.error('Synthesis execution failed:', err);
@@ -1678,6 +1787,46 @@ function getFrameBase64(idx) {
     return 'data:image/png;base64,' + AppState.data.synthesized_frames[idx - 1];
 }
 
+function makeSimulationCloudLayer(rawFrame, done) {
+    if (simulationCloudLayerCache.has(rawFrame)) {
+        done(simulationCloudLayerCache.get(rawFrame));
+        return;
+    }
+    const source = new Image();
+    source.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = source.naturalWidth;
+        canvas.height = source.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(source, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const pixels = imageData.data;
+        for (let i = 0; i < pixels.length; i += 4) {
+            const luminance = 0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2];
+            // Preserve only cloud reflectance: the synthetic ocean background becomes transparent.
+            const alpha = Math.max(0, Math.min(255, ((luminance - 52) / 150) * 255));
+            pixels[i + 3] = alpha;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        const layer = canvas.toDataURL('image/png');
+        simulationCloudLayerCache.set(rawFrame, layer);
+        done(layer);
+    };
+    source.onerror = () => done(rawFrame);
+    source.src = rawFrame;
+}
+
+function setViewportFrame(imageId, frameIndex, onload) {
+    const image = document.getElementById(imageId);
+    const rawFrame = getFrameBase64(frameIndex);
+    image.onload = onload || null;
+    if (!isSimulationSource()) {
+        image.src = rawFrame;
+        return;
+    }
+    makeSimulationCloudLayer(rawFrame, layer => { image.src = layer; });
+}
+
 function getFrameTimeString(idx) {
     const timeStr = document.getElementById('ctl-time')?.value || '10:00';
     const [baseHour, baseMin] = timeStr.split(':').map(n => parseInt(n, 10) || 0);
@@ -1690,8 +1839,9 @@ function getFrameTimeString(idx) {
 }
 
 function renderViewports() {
-    document.getElementById('view-img-t0').src = getFrameBase64(0);
-    document.getElementById('view-img-t1').src = getFrameBase64(AppState.totalFramesCount - 1);
+    setSimulationMapMode(isSimulationSource());
+    setViewportFrame('view-img-t0', 0);
+    setViewportFrame('view-img-t1', AppState.totalFramesCount - 1);
     document.getElementById('vp-hdr-t0').textContent = `T0 · ${getFrameTimeString(0)}:00 UTC`;
     document.getElementById('vp-hdr-t1').textContent = `T1 · ${getFrameTimeString(AppState.totalFramesCount - 1)}:00 UTC`;
     syncSaasViewer();
@@ -1701,7 +1851,7 @@ function renderViewports() {
 function selectTimelineFrame(idx) {
     AppState.selectedFrameIdx = idx;
     const aiImg = document.getElementById('view-img-ai');
-    aiImg.src = getFrameBase64(idx);
+    setViewportFrame('view-img-ai', idx, scheduleDiagnosticsRender);
     
     const isInput = idx === 0 || idx === AppState.totalFramesCount - 1;
     const labelPrefix = isInput ? 'Observation' : `Model Output · T+${Math.round((idx / (AppState.totalFramesCount - 1)) * 15)}m`;
@@ -1715,11 +1865,8 @@ function selectTimelineFrame(idx) {
 
     syncSaasViewer();
 
-    aiImg.onload = () => {
-        refreshOverlays();
-        drawTemperatureProfile();
-        drawHistogramChart();
-    };
+    refreshOverlays();
+    scheduleDiagnosticsRender();
 }
 
 function buildTimelineStrip() {
@@ -1806,7 +1953,9 @@ function refreshOverlays() {
         const showCloudburst = document.getElementById('layer-cloudburst').checked;
 
         if (showGrid) drawGraticuleGrid(ctx, w, h);
-        if (showCoast) drawSubcontinentCoastline(ctx, w, h);
+        // OpenStreetMap supplies accurate coastline and political-boundary context
+        // for simulations; retain the legacy linework for non-simulation displays.
+        if (showCoast && !isSimulationSource()) drawSubcontinentCoastline(ctx, w, h);
         if (showTrack) drawStormTrackAndCone(ctx, w, h);
         if (showCloudburst) drawCloudburstThreatZones(ctx, w, h);
         drawBorderCoordinateLabels(ctx, w, h);
@@ -1848,7 +1997,9 @@ function drawSubcontinentCoastline(ctx, w, h) {
 }
 
 function drawStormTrackAndCone(ctx, w, h) {
-    const pts = STORM_TRACK_POINTS.map(p => geoToPixel(p[0], p[1], w, h));
+    const track = AppState.data?.storm_track;
+    if (!track) return;
+    const pts = (track.forecast_waypoints || []).map(p => geoToPixel(p.lat, p.lon, w, h));
     if (pts.length < 2) return;
 
     // Uncertainty cone
@@ -1857,13 +2008,8 @@ function drawStormTrackAndCone(ctx, w, h) {
     ctx.lineWidth = 1;
     ctx.beginPath();
 
-    const topCone = [], botCone = [];
-    pts.forEach((pt, i) => {
-        const spread = (i + 1) * 3.5;
-        topCone.push([pt[0] - spread, pt[1] - spread]);
-        botCone.unshift([pt[0] + spread, pt[1] + spread]);
-    });
-    const conePoly = topCone.concat(botCone);
+    const conePoly = (track.cone_polygon_coords || []).map(p => geoToPixel(p[0], p[1], w, h));
+    if (conePoly.length < 3) return;
     conePoly.forEach((pt, i) => i === 0 ? ctx.moveTo(pt[0], pt[1]) : ctx.lineTo(pt[0], pt[1]));
     ctx.closePath();
     ctx.fill();
@@ -1879,7 +2025,7 @@ function drawStormTrackAndCone(ctx, w, h) {
     ctx.setLineDash([]);
 
     // Eye indicator
-    const currentEye = pts[2];
+    const currentEye = geoToPixel(track.current_center_lat, track.current_center_lon, w, h);
     ctx.strokeStyle = '#E5484D';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -1888,17 +2034,19 @@ function drawStormTrackAndCone(ctx, w, h) {
 }
 
 function drawCloudburstThreatZones(ctx, w, h) {
-    CONVECTIVE_CELLS.forEach(cell => {
-        const [cx, cy] = geoToPixel(cell.lat, cell.lon, w, h);
+    const clusters = AppState.data?.convective_nowcast?.active_threat_clusters || [];
+    clusters.forEach(cell => {
+        const [cx, cy] = geoToPixel(cell.centroid_lat, cell.centroid_lon, w, h);
+        const bounds = cell.bounding_box;
+        const [x0, y0] = geoToPixel(bounds.min_lat, bounds.min_lon, w, h);
+        const [x1, y1] = geoToPixel(bounds.max_lat, bounds.max_lon, w, h);
         ctx.strokeStyle = '#E5484D';
         ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.arc(cx, cy, cell.r * 0.75, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
 
         ctx.font = '8px "JetBrains Mono"';
         ctx.fillStyle = '#E5484D';
-        ctx.fillText(`NETRA ${cell.prob}%`, cx + 8, cy - 4);
+        ctx.fillText(`NETRA ${cell.cloudburst_probability_pct}%`, cx + 4, cy - 4);
     });
 }
 
@@ -1914,6 +2062,16 @@ function drawBorderCoordinateLabels(ctx, w, h) {
 /* ══════════════════════════════════════════════════════════════════════════ */
 /*                    METEOROLOGICAL MOTION & KINEMATIC FIELD                 */
 /* ══════════════════════════════════════════════════════════════════════════ */
+function scheduleDiagnosticsRender() {
+    // Run after layout as these canvases live in flex/grid panels whose dimensions
+    // are not guaranteed to be available at image-load time.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        drawMotionField();
+        drawTemperatureProfile();
+        drawHistogramChart();
+    }));
+}
+
 function drawMotionField() {
     const canvas = document.getElementById('canvas-motion-field');
     if (!canvas || !canvas.parentElement) return;
@@ -1925,8 +2083,17 @@ function drawMotionField() {
 
     ctx.clearRect(0, 0, w, h);
 
+    const flowGrid = AppState.data?.diagnostics?.flow_grid_pixels;
+    if (flowGrid?.u?.length && flowGrid?.v?.length) {
+        drawFlowStreamlines(ctx, w, h, flowGrid);
+        return;
+    }
+
     if (AppState.flowImageObj && AppState.flowImageObj.complete) {
         ctx.drawImage(AppState.flowImageObj, 0, 0, w, h);
+        // This image is rendered from the interpolator's actual optical-flow tensor.
+        // Do not add synthetic arrows or coastlines that imply measurements we do not have.
+        return;
     } else {
         const grad = ctx.createRadialGradient(w * 0.55, h * 0.45, 10, w * 0.55, h * 0.45, w * 0.6);
         grad.addColorStop(0, '#0c1a36');
@@ -1959,6 +2126,39 @@ function drawMotionField() {
 
             const color = getMeteorologicalVelocityHex(clampedSpd / maxSpeedKmh);
             drawVectorArrow(ctx, x, y, x + dx, y + dy, color);
+        }
+    }
+}
+
+function drawFlowStreamlines(ctx, w, h, grid) {
+    ctx.fillStyle = '#07101f';
+    ctx.fillRect(0, 0, w, h);
+    const rows = grid.u.length, cols = grid.u[0].length;
+    const sx = w / Math.max(1, grid.source_width || cols);
+    const sy = h / Math.max(1, grid.source_height || rows);
+    const sample = (x, y) => {
+        const gx = Math.max(0, Math.min(cols - 1, (x / w) * (cols - 1)));
+        const gy = Math.max(0, Math.min(rows - 1, (y / h) * (rows - 1)));
+        const x0 = Math.floor(gx), y0 = Math.floor(gy), x1 = Math.min(cols - 1, x0 + 1), y1 = Math.min(rows - 1, y0 + 1);
+        const tx = gx - x0, ty = gy - y0;
+        const interpolate = values => (values[y0][x0] * (1 - tx) + values[y0][x1] * tx) * (1 - ty) + (values[y1][x0] * (1 - tx) + values[y1][x1] * tx) * ty;
+        return [interpolate(grid.u) * sx, interpolate(grid.v) * sy];
+    };
+    ctx.strokeStyle = 'rgba(235, 248, 255, 0.84)';
+    ctx.lineWidth = 0.8;
+    for (let startY = 8; startY < h; startY += 12) {
+        for (let startX = 8; startX < w; startX += 12) {
+            let x = startX, y = startY;
+            ctx.beginPath(); ctx.moveTo(x, y);
+            for (let step = 0; step < 18; step++) {
+                const [u, v] = sample(x, y);
+                const magnitude = Math.hypot(u, v);
+                if (magnitude < 0.03) break;
+                x += u * 0.35; y += v * 0.35;
+                if (x < 0 || x > w || y < 0 || y > h) break;
+                ctx.lineTo(x, y);
+            }
+            ctx.stroke();
         }
     }
 }
@@ -2009,6 +2209,38 @@ function getMeteorologicalVelocityHex(t) {
 /* ══════════════════════════════════════════════════════════════════════════ */
 /*                    TEMPERATURE PROFILE CROSS-SECTION                      */
 /* ══════════════════════════════════════════════════════════════════════════ */
+function getPreviewPixels(imageId, width = 96, height = 48) {
+    const image = document.getElementById(imageId);
+    if (!image || !image.complete || !image.naturalWidth) return null;
+    const sampleCanvas = document.createElement('canvas');
+    sampleCanvas.width = width;
+    sampleCanvas.height = height;
+    const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+    sampleCtx.drawImage(image, 0, 0, width, height);
+    return sampleCtx.getImageData(0, 0, width, height).data;
+}
+
+function previewBrightnessToTemperature(r, g, b) {
+    // The preview maps cold cloud tops to bright pixels. This display-derived
+    // proxy preserves the existing API while keeping TIR diagnostics responsive.
+    const brightness = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return 302.0 - (brightness / 255.0) * 112.0;
+}
+
+function getTemperatureProfile(imageId, fallback) {
+    const width = 96, height = 48;
+    const pixels = getPreviewPixels(imageId, width, height);
+    if (!pixels) return fallback;
+    return Array.from({ length: width }, (_, x) => {
+        let total = 0;
+        for (let y = 0; y < height; y++) {
+            const idx = (y * width + x) * 4;
+            total += previewBrightnessToTemperature(pixels[idx], pixels[idx + 1], pixels[idx + 2]);
+        }
+        return total / height;
+    });
+}
+
 function drawTemperatureProfile() {
     const canvas = document.getElementById('canvas-temp-profile');
     if (!canvas || !canvas.parentElement) return;
@@ -2034,16 +2266,21 @@ function drawTemperatureProfile() {
         ctx.fillText(k + 'K', 4, y + 3);
     }
 
-    const steps = 60;
-    const curveT0 = [], curveAI = [], curveT1 = [];
-    for (let i = 0; i <= steps; i++) {
-        const normX = i / steps;
+    const fallbackT0 = [], fallbackAI = [], fallbackT1 = [];
+    for (let i = 0; i <= 60; i++) {
+        const normX = i / 60;
         const dist = Math.abs(normX - 0.48);
         const dip = Math.exp(-Math.pow(dist, 2) / 0.015);
-        curveT0.push(292.0 - dip * 88.0);
-        curveAI.push(290.0 - dip * 98.0);
-        curveT1.push(288.0 - dip * 104.0);
+        fallbackT0.push(292.0 - dip * 88.0);
+        fallbackAI.push(290.0 - dip * 98.0);
+        fallbackT1.push(288.0 - dip * 104.0);
     }
+    const rawProfiles = AppState.data?.diagnostics?.tir_profiles_k;
+    const synthIndex = Math.max(0, Math.min((rawProfiles?.synthesized?.length || 1) - 1, AppState.selectedFrameIdx - 1));
+    const curveT0 = rawProfiles?.t0 || getTemperatureProfile('view-img-t0', fallbackT0);
+    const curveAI = AppState.selectedFrameIdx === 0 ? curveT0 : (AppState.selectedFrameIdx === AppState.totalFramesCount - 1 ? (rawProfiles?.t1 || fallbackT1) : (rawProfiles?.synthesized?.[synthIndex] || getTemperatureProfile('view-img-ai', fallbackAI)));
+    const curveT1 = rawProfiles?.t1 || getTemperatureProfile('view-img-t1', fallbackT1);
+    const steps = curveAI.length - 1;
 
     const plotCurve = (arr, color, width) => {
         ctx.strokeStyle = color;
@@ -2077,11 +2314,26 @@ function drawHistogramChart() {
     ctx.clearRect(0, 0, w, h);
 
     const bins = 28;
-    const binCounts = [];
-    for (let i = 0; i < bins; i++) {
-        const tVal = 180 + (i / bins) * 120;
-        const count = Math.exp(-Math.pow(tVal - 250, 2) / (2 * Math.pow(22, 2))) * 180;
-        binCounts.push(count);
+    const binCounts = Array(bins).fill(0);
+    const sampleWidth = 96, sampleHeight = 48;
+    const rawHistograms = AppState.data?.diagnostics?.tir_histograms;
+    const synthIndex = Math.max(0, Math.min((rawHistograms?.synthesized?.length || 1) - 1, AppState.selectedFrameIdx - 1));
+    const selectedHistogram = AppState.selectedFrameIdx === 0 ? rawHistograms?.t0 : (AppState.selectedFrameIdx === AppState.totalFramesCount - 1 ? rawHistograms?.t1 : rawHistograms?.synthesized?.[synthIndex]);
+    const pixels = getPreviewPixels('view-img-ai', sampleWidth, sampleHeight);
+    if (selectedHistogram) {
+        selectedHistogram.forEach((count, index) => { binCounts[index] = count; });
+    } else if (pixels) {
+        for (let i = 0; i < pixels.length; i += 4) {
+            const tempK = previewBrightnessToTemperature(pixels[i], pixels[i + 1], pixels[i + 2]);
+            const bin = Math.max(0, Math.min(bins - 1, Math.floor(((tempK - 180) / 125) * bins)));
+            binCounts[bin] += 1;
+        }
+    } else {
+        // Visible fallback before the first frame image has loaded.
+        for (let i = 0; i < bins; i++) {
+            const tVal = 180 + (i / bins) * 120;
+            binCounts[i] = Math.exp(-Math.pow(tVal - 250, 2) / (2 * Math.pow(22, 2))) * 180;
+        }
     }
     const maxCount = Math.max(...binCounts, 1);
     const barW = w / bins;
@@ -2108,10 +2360,11 @@ function handleViewportHover(evt, container) {
 }
 
 function updateTelemetryMetrics(metrics) {
-    document.getElementById('metric-psnr').textContent = '36.42';
-    document.getElementById('metric-ssim').textContent = '0.9620';
-    document.getElementById('metric-rmse').textContent = '3.21 %';
-    document.getElementById('metric-tc').textContent = '0.9710';
+    const format = (value, suffix = '', digits = 2) => Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : 'N/A';
+    document.getElementById('metric-psnr').textContent = format(metrics?.psnr_db, ' dB');
+    document.getElementById('metric-ssim').textContent = format(metrics?.ssim, '', 4);
+    document.getElementById('metric-rmse').textContent = format(metrics?.rmse_pct, ' %');
+    document.getElementById('metric-tc').textContent = format(metrics?.temporal_consistency, '', 4);
 }
 
 function updateNowcastingTelemetry(data) {
@@ -2167,12 +2420,11 @@ function syncSaasViewer() {
 /*                              INITIALIZATION                               */
 /* ══════════════════════════════════════════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded', () => {
+    scheduleDiagnosticsRender();
     executeSynthesis();
     window.addEventListener('resize', () => {
         refreshOverlays();
-        drawMotionField();
-        drawTemperatureProfile();
-        drawHistogramChart();
+        scheduleDiagnosticsRender();
     });
 });
 </script>

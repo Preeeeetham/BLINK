@@ -165,6 +165,31 @@ def _tensor_to_base64(tensor: torch.Tensor) -> str:
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
+def _build_diagnostics(t0: torch.Tensor, t1: torch.Tensor, synthesized: List[torch.Tensor], flow: torch.Tensor) -> Dict[str, object]:
+    """Compact, source-independent diagnostic samples from the actual model tensors."""
+    def tir(frame: torch.Tensor) -> np.ndarray:
+        data = frame.detach().cpu().squeeze(0).numpy()
+        channel = data[2] if data.shape[0] >= 3 else data[-1]
+        return 298.0 - np.clip(channel, 0.0, 1.0) * 105.0
+
+    def profile(frame: torch.Tensor) -> List[float]:
+        temp = tir(frame)
+        return np.mean(temp, axis=0).astype(float).round(2).tolist()
+
+    def histogram(frame: torch.Tensor) -> List[int]:
+        counts, _ = np.histogram(tir(frame), bins=28, range=(180.0, 305.0))
+        return counts.astype(int).tolist()
+
+    flow_np = flow.detach().cpu().squeeze(0).numpy()
+    step_y = max(1, flow_np.shape[1] // 24)
+    step_x = max(1, flow_np.shape[2] // 24)
+    return {
+        "tir_profiles_k": {"t0": profile(t0), "t1": profile(t1), "synthesized": [profile(frame) for frame in synthesized]},
+        "tir_histograms": {"t0": histogram(t0), "t1": histogram(t1), "synthesized": [histogram(frame) for frame in synthesized]},
+        "flow_grid_pixels": {"source_width": int(flow_np.shape[2]), "source_height": int(flow_np.shape[1]), "u": flow_np[0, ::step_y, ::step_x].astype(float).round(3).tolist(), "v": flow_np[1, ::step_y, ::step_x].astype(float).round(3).tolist()},
+    }
+
+
 def _bounded_spatial_size(height: int, width: int, max_dimension: int) -> tuple[int, int]:
     if max_dimension <= 0:
         return height, width
@@ -500,6 +525,7 @@ def simulate_scenario(req: SimulationRequest):
             "max_displacement_pixels": mag_max,
         },
         "flow_visualization_base64": _render_flow_visualization(result.flow_01),
+        "diagnostics": _build_diagnostics(t0, t1, result.synthesized_frames, result.flow_01),
         "storm_track": track_report.to_dict(),
         "convective_nowcast": nowcast_report.to_dict(),
     }
@@ -580,6 +606,7 @@ async def interpolate_upload(
             "max_displacement_pixels": mag_max,
         },
         "flow_visualization_base64": _render_flow_visualization(result.flow_01),
+        "diagnostics": _build_diagnostics(t0, t1, result.synthesized_frames, result.flow_01),
         "storm_track": track_report.to_dict(),
         "convective_nowcast": nowcast_report.to_dict(),
     }
@@ -692,6 +719,7 @@ def interpolate_realtime_feed(req: RealDataInterpolateRequest):
             "max_displacement_pixels": mag_max,
         },
         "flow_visualization_base64": _render_flow_visualization(result.flow_01),
+        "diagnostics": _build_diagnostics(t0, t1, result.synthesized_frames, result.flow_01),
         "storm_track": track_report.to_dict(),
         "convective_nowcast": nowcast_report.to_dict(),
     }

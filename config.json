@@ -1,0 +1,21 @@
+{
+    "user_credentials": {
+        "username/email": "researcher@example.org",
+        "password": "sec_token_999"
+    },
+    "search_parameters": {
+        "datasetId": "3SIMG_L1B_STD",
+        "startTime": "2026-08-29",
+        "endTime": "2026-08-29",
+        "count": "",
+        "boundingBox": "",
+        "gId": ""
+    },
+    "download_settings": {
+        "download_path": "C:/Users/polur/projects/BLINK/data/raw_netcdf/mosdac",
+        "organize_by_date": false,
+        "skip_user_input": true,
+        "generate_error_logs": true,
+        "error_logs_dir": "error_logs"
+    }
+}

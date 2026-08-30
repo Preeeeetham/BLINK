@@ -52,3 +52,46 @@ def test_simulate_scenario_endpoint():
     assert data["metrics"]["psnr_db"] > 5.0
     assert data["metrics"]["ssim"] > 0.0
     assert len(data["t0_base64"]) > 50
+
+
+def test_fetch_query_endpoint():
+    payload = {
+        "source": "MOSDAC_INSAT3DS",
+        "date": "2026-08-28",
+        "region": "indian_subcontinent",
+    }
+    res = client.post("/v1/fetch/query", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert "available_scans" in data
+    assert len(data["available_scans"]) > 0
+
+
+def test_fetch_realtime_endpoint():
+    payload = {
+        "source": "REAL_SATELLITE",
+        "date": "2026-08-28",
+        "time": "10:00",
+        "region": "bay_of_bengal",
+        "cadence_steps": 3,
+        "grid_size": 64,
+    }
+    res = client.post("/v1/fetch/realtime", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert "synthesized_frames" in data
+    assert len(data["synthesized_frames"]) == 2
+    assert "storm_track" in data
+    assert "convective_nowcast" in data
+
+
+def test_config_mosdac_endpoint():
+    payload = {
+        "username": "researcher@example.org",
+        "api_token": "sec_token_999",
+    }
+    res = client.post("/v1/config/mosdac", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert data["is_configured"] is True

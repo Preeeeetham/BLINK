@@ -149,30 +149,45 @@ class GeoNormalizer:
         return rgb_uint8
 
     @staticmethod
-    def tensor_to_rgb_preview(tensor: torch.Tensor, mode: str = "tir1") -> np.ndarray:
+    def tensor_to_rgb_preview(tensor: torch.Tensor, mode: str = "enhanced_ir") -> np.ndarray:
         """
         Converts a normalized tensor (1, C, H, W) to displayable RGB preview array (H, W, 3) [0..255].
-        Produces high-contrast, realistic meteorological satellite infrared imagery.
+        Produces high-contrast, vivid meteorological satellite imagery with clearly defined clouds,
+        deep oceanic basins, and luminous convective cores.
         """
         arr = tensor.detach().cpu().squeeze(0).numpy()
         c, h, w = arr.shape
 
-        if c == 1:
-            val = np.clip(arr[0], 0.0, 1.0)
-            gray = (val * 255.0).astype(np.uint8)
-            return np.stack([gray, gray, gray], axis=-1)
-        elif c >= 3:
-            # Channel 2 is IMG_TIR1 (normalized in [0, 1], where 1.0 = coldest cloud top)
-            # Channel 0 is IMG_VIS
-            # Channel 1 is IMG_WV
-            tir = arr[2] if c >= 3 else arr[0]
-            vis = arr[0]
+        if c >= 3:
+            vis = np.clip(arr[0], 0.0, 1.0)
+            wv = np.clip(arr[1], 0.0, 1.0)
+            tir = np.clip(arr[2], 0.0, 1.0)
 
-            # High-fidelity meteorological grayscale infrared rendering
-            # Cold cloud tops are bright white with crisp texture, background is dark ocean/land
-            contrast_cloud = np.power(np.clip(tir, 0.0, 1.0), 0.9)
-            base_gray = np.clip(contrast_cloud * 240.0 + 15.0, 0.0, 255.0).astype(np.uint8)
-            return np.stack([base_gray, base_gray, base_gray], axis=-1)
+            # Cloud intensity is strongest where TIR is cold (high normalized value) or VIS is high
+            cloud_intensity = np.maximum(tir * 1.15, vis * 0.95)
+            cloud_norm = np.clip(cloud_intensity, 0.0, 1.0)
+            cloud_gamma = np.power(cloud_norm, 0.8)
+
+            # Build rich false-color meteorological composite
+            # Deep ocean/land background: (8, 18, 38)
+            bg_r = 10.0
+            bg_g = 18.0
+            bg_b = 36.0
+
+            # Mid-level clouds: soft cyan/white
+            # Severe convective cloud tops: brilliant luminous white with cyan tint
+            r_out = bg_r * (1.0 - cloud_gamma) + (cloud_gamma * 255.0)
+            g_out = bg_g * (1.0 - cloud_gamma) + (cloud_gamma * 252.0)
+            b_out = bg_b * (1.0 - cloud_gamma) + (cloud_gamma * 248.0)
+
+            # Cold convective cores (TIR > 0.82) glow with intense bright white/cyan
+            severe_mask = np.clip((tir - 0.80) / 0.18, 0.0, 1.0)
+            r_out = np.clip(r_out * (1.0 - severe_mask * 0.15) + severe_mask * 255.0, 0.0, 255.0)
+            g_out = np.clip(g_out * (1.0 - severe_mask * 0.05) + severe_mask * 255.0, 0.0, 255.0)
+            b_out = np.clip(b_out + severe_mask * 20.0, 0.0, 255.0)
+
+            rgb = np.stack([r_out, g_out, b_out], axis=-1)
+            return rgb.astype(np.uint8)
         else:
             gray = np.clip(arr[0] * 255.0, 0, 255).astype(np.uint8)
             return np.stack([gray, gray, gray], axis=-1)

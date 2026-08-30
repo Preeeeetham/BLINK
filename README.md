@@ -137,12 +137,30 @@ pytest tests/ -v
 python scripts/benchmark_eval.py
 ```
 
-### 4.4 Launch Operational Ground Station Web Console & API Server
+### 4.4 Quick CLI Commands
+
+Project BLINK includes a unified CLI (`blink.py` and `blink.cmd` / `blink.bat` / `blink.ps1`):
+
 ```bash
-python -m uvicorn src.api.server:app --host 0.0.0.0 --port 8000
+# Start the operational web console (default: http://localhost:8000)
+blink start
+# or in background mode:
+blink start -d
+
+# Host on local Wi-Fi / LAN for mobile/tablet & remote workstation monitoring:
+blink host
+
+# Check server health, PID, and live status:
+blink status
+
+# Run system, hardware, and dependency diagnostics:
+blink diagnose
+
+# Stop the running BLINK server instance:
+blink stop
 ```
 Open your browser and navigate to:
-- **Operational Console:** `http://localhost:8000`
+- **Operational Console:** `http://localhost:8000` (or `http://<WIFI_IP>:8000` when hosted)
 - **OpenAPI Documentation:** `http://localhost:8000/docs`
 
 ---

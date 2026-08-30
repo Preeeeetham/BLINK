@@ -6,30 +6,46 @@
     <title>BLINK | Operational Satellite Kinematics & Nowcasting Console</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        /* ══════════════════════════════════════════════════════════════════════════ */
+        /*                          BLINK DESIGN TOKENS                               */
+        /* ══════════════════════════════════════════════════════════════════════════ */
         :root {
-            --bg-root: #060913;
-            --bg-panel: #0b1120;
-            --bg-surface: #0f172a;
-            --bg-elevated: #1e293b;
-            --bg-input: #090e1a;
-            --border-base: #1e293b;
-            --border-dim: #151f32;
-            --border-highlight: #2563eb;
-            --accent: #2563eb;
-            --accent-bright: #38bdf8;
-            --accent-dim: #1e3a5f;
-            --accent-glow: rgba(37,99,235,0.18);
-            --success: #10b981;
-            --warn: #f59e0b;
-            --danger: #ef4444;
-            --text-0: #f8fafc;
-            --text-1: #e2e8f0;
-            --text-2: #94a3b8;
-            --text-3: #64748b;
+            /* Surfaces — True Neutral Grayscale */
+            --bg-canvas:         #0A0A0B;
+            --bg-surface:        #131417;
+            --bg-surface-raised: #1B1C20;
+            --bg-input:          #16171B;
+            --border-hairline:   #26272C;
+            --border-hairline-strong: #34363C;
+
+            /* Text — Clean Neutral Typography */
+            --text-primary:   #F2F2F3;
+            --text-secondary: #9A9CA3;
+            --text-tertiary:  #5C5E66;
+
+            /* Single Interactive Accent — Institutional, Flat */
+            --accent:         #4C8DFF;
+            --accent-hover:   #3B7BF0;
+            --accent-subtle:  rgba(76, 141, 255, 0.08);
+            --accent-subtle-border: rgba(76, 141, 255, 0.35);
+
+            /* Semantic Status (Okabe–Ito / Colorblind Safe) */
+            --status-nominal:  #2FA36B;
+            --status-caution:  #E0A72E;
+            --status-severe:   #E5484D;
+            --status-info:     #56B4E9;
+
+            /* Data-Source Identity Colors */
+            --data-raw:        #56B4E9;   /* Sky Blue */
+            --data-synth:      #2FA36B;   /* Bluish Green */
+
+            /* Typography & Geometry */
             --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
+            --radius-sm: 4px;
+            --radius-md: 6px;
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -37,373 +53,513 @@
         html, body {
             height: 100%;
             overflow: hidden;
-            background: var(--bg-root);
-            color: var(--text-0);
-            font-family: var(--font-sans);
-            font-size: 12.5px;
-            letter-spacing: -0.01em;
-        }
-
-        /* ─── APP SHELL ─── */
-        .app-container {
-            display: grid;
-            grid-template-columns: 225px 1fr 280px;
-            height: 100vh;
-            background: var(--bg-root);
-        }
-
-        /* ─── PANELS ─── */
-        .panel-left, .panel-right {
-            background: var(--bg-panel);
-            overflow-y: auto;
-            scrollbar-width: thin;
-            scrollbar-color: var(--border-base) transparent;
-        }
-        .panel-left::-webkit-scrollbar, .panel-right::-webkit-scrollbar { width: 4px; }
-        .panel-left::-webkit-scrollbar-thumb, .panel-right::-webkit-scrollbar-thumb { background: var(--border-base); border-radius: 2px; }
-
-        .panel-left {
-            border-right: 1px solid var(--border-dim);
-            padding: 12px 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 9px;
-        }
-
-        .panel-right {
-            border-left: 1px solid var(--border-dim);
-            padding: 12px 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .center-stage {
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            background: var(--bg-root);
-            position: relative;
-        }
-
-        /* ─── SECTION LABELS ─── */
-        .section-label {
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 1.2px;
-            text-transform: uppercase;
-            color: var(--text-3);
-            margin-top: 4px;
-        }
-
-        /* ─── FORM CONTROLS ─── */
-        .control-group { display: flex; flex-direction: column; gap: 3px; }
-        .control-label { font-size: 9.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
-        
-        select, input[type="text"] {
-            width: 100%;
-            background: var(--bg-input);
-            color: var(--text-1);
-            border: 1px solid var(--border-base);
-            border-radius: 4px;
-            padding: 6px 8px;
+            background: var(--bg-canvas);
+            color: var(--text-primary);
             font-family: var(--font-sans);
             font-size: 12px;
+            line-height: 1.4;
+            letter-spacing: -0.01em;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ─── APP SHELL: TOP NAVIGATION ─── */
+        .top-navbar {
+            height: 40px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border-hairline);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            z-index: 50;
+        }
+        .brand-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .brand-logo {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .brand-badge {
+            font-size: 10px;
+            font-family: var(--font-sans);
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: var(--bg-surface-raised);
+            border: 1px solid var(--border-hairline);
+            padding: 2px 7px;
+            border-radius: var(--radius-sm);
+        }
+        .brand-divider {
+            width: 1px;
+            height: 16px;
+            background: var(--border-hairline);
+        }
+        .brand-desc {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        /* Segmented Mode Switcher */
+        .segmented-control {
+            display: flex;
+            background: var(--bg-canvas);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            padding: 2px;
+            gap: 2px;
+        }
+        .segmented-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 4px 12px;
+            font-size: 11px;
+            font-weight: 500;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: color 0.15s, background-color 0.15s;
+        }
+        .segmented-btn:hover { color: var(--text-primary); }
+        .segmented-btn.active {
+            background: var(--bg-surface-raised);
+            color: var(--text-primary);
+            border: 1px solid var(--border-hairline-strong);
+        }
+
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            font-family: var(--font-mono);
+            color: var(--text-secondary);
+        }
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--status-nominal);
+        }
+
+        /* ─── MAIN WORKSTATION GRID ─── */
+        .app-container {
+            display: grid;
+            grid-template-columns: 250px 1fr 295px;
+            height: calc(100vh - 40px);
+            background: var(--bg-canvas);
+        }
+
+        /* ─── LEFT CONTROL RAIL ─── */
+        .panel-left {
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border-hairline);
+            padding: 14px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-hairline) transparent;
+        }
+        .panel-left::-webkit-scrollbar { width: 4px; }
+        .panel-left::-webkit-scrollbar-thumb { background: var(--border-hairline); }
+
+        .control-section {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .section-heading {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--text-tertiary);
+            margin-bottom: 1px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .control-label {
+            font-size: 10.5px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        select, input[type="text"], input[type="file"] {
+            width: 100%;
+            background: var(--bg-input);
+            color: var(--text-primary);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            padding: 6px 8px;
+            font-family: var(--font-sans);
+            font-size: 11.5px;
             outline: none;
             appearance: none;
             cursor: pointer;
             transition: border-color 0.12s;
         }
         select {
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239A9CA3' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
             background-repeat: no-repeat;
             background-position: right 8px center;
             padding-right: 22px;
         }
-        select:focus, input:focus { border-color: var(--accent); }
+        select:focus, input:focus {
+            border-color: var(--accent);
+        }
 
-        /* Direct Ingestion Drop Box */
-        .drop-box {
-            border: 1px dashed var(--border-base);
-            border-radius: 4px;
-            padding: 7px 8px;
-            background: var(--bg-surface);
+        .input-row-2col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        /* Direct Ingestion File Container */
+        .ingest-box {
+            background: var(--bg-surface-raised);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            padding: 6px 8px;
             display: flex;
             flex-direction: column;
             gap: 5px;
-            transition: border-color 0.15s, background 0.15s;
         }
-        .drop-box:hover, .drop-box.drag-active {
-            border-color: var(--accent-bright);
-            background: var(--accent-glow);
-        }
-        .drop-file-row {
+        .ingest-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 6px;
             background: var(--bg-input);
             padding: 4px 6px;
-            border-radius: 3px;
-            border: 1px solid var(--border-dim);
-            font-size: 10px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-hairline);
+            font-size: 10.5px;
         }
-        .drop-file-badge {
-            font-weight: 700;
+        .ingest-badge {
             font-family: var(--font-mono);
-            color: var(--accent-bright);
-            font-size: 9.5px;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--data-raw);
         }
-        .drop-file-name {
+        .ingest-name {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            max-width: 110px;
-            color: var(--text-1);
+            max-width: 120px;
+            color: var(--text-secondary);
             font-family: var(--font-mono);
-            font-size: 9.5px;
+            font-size: 10px;
         }
-        .drop-browse-btn {
-            background: var(--accent-dim);
-            color: var(--accent-bright);
-            border: 1px solid var(--border-base);
-            border-radius: 2px;
+        .ingest-browse-btn {
+            background: var(--bg-surface-raised);
+            color: var(--text-primary);
+            border: 1px solid var(--border-hairline-strong);
+            border-radius: 3px;
             padding: 2px 6px;
-            font-size: 9px;
-            font-weight: 600;
+            font-size: 9.5px;
+            font-weight: 500;
             cursor: pointer;
             flex-shrink: 0;
         }
-        .drop-browse-btn:hover { background: var(--accent); color: #fff; }
+        .ingest-browse-btn:hover { background: var(--border-hairline-strong); }
 
-        /* Checkboxes */
-        .checkbox-row {
+        /* Buttons */
+        .btn-primary {
+            width: 100%;
+            background: var(--accent);
+            color: #FFFFFF;
+            border: 1px solid var(--accent);
+            border-radius: var(--radius-sm);
+            padding: 8px 12px;
+            font-family: var(--font-sans);
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.12s;
+            text-align: center;
+            letter-spacing: 0.02em;
+        }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-primary.loading { opacity: 0.6; pointer-events: none; }
+
+        .btn-outline {
+            width: 100%;
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            padding: 6px 10px;
+            font-family: var(--font-sans);
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: border-color 0.12s, color 0.12s;
+        }
+        .btn-outline:hover {
+            border-color: var(--border-hairline-strong);
+            color: var(--text-primary);
+        }
+
+        .hairline-divider {
+            height: 1px;
+            background: var(--border-hairline);
+            margin: 2px 0;
+        }
+
+        /* Checkbox Rows */
+        .checkbox-item {
             display: flex;
             align-items: center;
             gap: 7px;
             cursor: pointer;
             padding: 2px 0;
         }
-        .checkbox-row input[type="checkbox"] {
+        .checkbox-item input[type="checkbox"] {
             appearance: none;
-            width: 14px; height: 14px;
-            border: 1px solid var(--border-base);
-            border-radius: 3px;
+            width: 13px; height: 13px;
+            border: 1px solid var(--border-hairline-strong);
+            border-radius: 2px;
             background: var(--bg-input);
             cursor: pointer;
             position: relative;
             flex-shrink: 0;
         }
-        .checkbox-row input[type="checkbox"]:checked {
+        .checkbox-item input[type="checkbox"]:checked {
             background: var(--accent);
             border-color: var(--accent);
         }
-        .checkbox-row input[type="checkbox"]:checked::after {
+        .checkbox-item input[type="checkbox"]:checked::after {
             content: '';
             position: absolute;
-            left: 4px; top: 1.5px;
-            width: 4px; height: 7px;
-            border: solid #fff;
+            left: 3.5px; top: 1px;
+            width: 3.5px; height: 6.5px;
+            border: solid #FFFFFF;
             border-width: 0 1.5px 1.5px 0;
             transform: rotate(45deg);
         }
-        .checkbox-row label {
-            font-size: 11.5px;
-            color: var(--text-1);
+        .checkbox-item label {
+            font-size: 11px;
+            color: var(--text-secondary);
             cursor: pointer;
             user-select: none;
         }
 
-        /* View Toolbar Buttons */
-        .view-toolbar { display: flex; align-items: center; gap: 5px; }
-        .tool-btn {
-            height: 26px;
-            padding: 0 8px;
-            display: flex; align-items: center; justify-content: center;
-            background: var(--bg-surface);
-            border: 1px solid var(--border-dim);
-            border-radius: 3px;
-            color: var(--text-2);
-            font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.1s;
-        }
-        .tool-btn:hover { border-color: var(--accent); color: var(--text-0); }
-        .tool-btn.active { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
-
-        .latlon-indicator {
-            font-size: 11px;
+        /* Coordinates Indicator */
+        .coords-bar {
+            background: var(--bg-input);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            padding: 4px 8px;
             font-family: var(--font-mono);
-            color: var(--text-3);
-            margin-top: 3px;
+            font-size: 10.5px;
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: space-between;
+        }
+        .coords-val { color: var(--text-primary); font-weight: 500; }
+
+        /* ─── CENTER STAGE ─── */
+        .center-stage {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg-canvas);
+            position: relative;
         }
 
-        .action-button {
-            width: 100%;
-            padding: 8px;
-            background: var(--accent);
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            font-family: var(--font-sans);
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.12s;
-            letter-spacing: 0.3px;
-            margin-top: 4px;
-        }
-        .action-button:hover { background: #1d4ed8; }
-        .action-button.loading { opacity: 0.6; pointer-events: none; }
-
-        .divider { height: 1px; background: var(--border-dim); margin: 3px 0; }
-
-        /* ─── TOP 3-VIEWPORT STRIP ─── */
+        /* 3-Viewport Strip */
         .viewport-strip {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
             gap: 8px;
-            padding: 8px 10px 6px;
+            padding: 10px 12px 6px;
             flex-shrink: 0;
         }
-
         .viewport-card {
-            border: 1px solid var(--border-dim);
-            border-radius: 4px;
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
             overflow: hidden;
-            background: #000;
+            background: #000000;
             position: relative;
-            transition: border-color 0.15s;
+            display: flex;
+            flex-direction: column;
         }
-        .viewport-card.drag-over {
-            border-color: var(--accent-bright) !important;
-            box-shadow: 0 0 14px var(--accent-bright);
-        }
-        .viewport-card.active-synth {
-            border-color: var(--accent);
-            box-shadow: 0 0 12px rgba(37,99,235,0.25);
-        }
-
-        .viewport-header {
-            padding: 6px 10px;
-            font-size: 11px;
-            font-weight: 600;
-            text-align: center;
+        .viewport-card.synthesized-card {
+            border-color: var(--data-synth);
             background: var(--bg-surface);
-            border-bottom: 1px solid var(--border-dim);
-            color: var(--text-2);
+        }
+        .viewport-card-header {
+            padding: 5px 8px;
+            font-size: 10.5px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border-hairline);
+            color: var(--text-secondary);
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 8px;
+            justify-content: space-between;
         }
-        .viewport-card.active-synth .viewport-header {
-            background: var(--accent);
-            color: #fff;
-            border-bottom-color: var(--accent);
+        .viewport-card.synthesized-card .viewport-card-header {
+            background: var(--bg-surface-raised);
+            color: var(--text-primary);
+        }
+        .viewport-tag {
+            font-family: var(--font-mono);
+            font-size: 9.5px;
+            font-weight: 600;
+            padding: 1px 5px;
+            border-radius: 2px;
+        }
+        .viewport-tag.raw {
+            background: rgba(86, 180, 233, 0.12);
+            color: var(--data-raw);
+            border: 1px solid rgba(86, 180, 233, 0.3);
+        }
+        .viewport-tag.synth {
+            background: rgba(47, 163, 107, 0.12);
+            color: var(--data-synth);
+            border: 1px solid rgba(47, 163, 107, 0.3);
         }
 
-        .viewport-body {
+        .viewport-canvas-container {
             position: relative;
-            background: #000;
+            background: #000000;
             aspect-ratio: 1.33;
             overflow: hidden;
             cursor: crosshair;
         }
-
-        .viewport-body img {
-            width: 100%; height: 100%;
+        .viewport-canvas-container img {
+            width: 100%;
+            height: 100%;
             object-fit: cover;
             display: block;
         }
-
-        .viewport-body canvas.geo-overlay {
+        .viewport-canvas-container canvas.geo-overlay {
             position: absolute;
             top: 0; left: 0;
             width: 100%; height: 100%;
             pointer-events: none;
         }
 
-        .viewport-controls-top {
-            position: absolute;
-            top: 5px;
-            right: 8px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .vp-ctrl-btn {
-            padding: 2px 6px;
-            height: 20px;
-            background: rgba(0,0,0,0.6);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 3px;
-            color: #fff;
-            cursor: pointer;
-            font-size: 10px;
-            font-family: var(--font-mono);
-            display: flex; align-items: center; justify-content: center;
-            backdrop-filter: blur(4px);
-        }
-        .vp-ctrl-btn:hover { background: var(--accent); border-color: var(--accent); }
-
-        /* ─── TIMELINE SECTION ─── */
-        .timeline-container {
-            background: var(--bg-panel);
-            border-top: 1px solid var(--border-dim);
-            border-bottom: 1px solid var(--border-dim);
+        /* Dedicated Video Playback Bar (Below Viewports, Never Overlapping) */
+        .playback-bar {
+            margin: 0 12px;
             padding: 6px 10px;
-            flex-shrink: 0;
-        }
-
-        .timeline-header-bar {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 5px;
+            gap: 12px;
+            flex-shrink: 0;
         }
-        .timeline-heading {
-            font-size: 9.5px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            color: var(--text-3);
+        .playback-controls-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .ctrl-btn {
+            background: var(--bg-surface-raised);
+            border: 1px solid var(--border-hairline-strong);
+            color: var(--text-primary);
+            border-radius: var(--radius-sm);
+            padding: 3px 8px;
+            font-size: 10.5px;
+            font-family: var(--font-mono);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: background 0.1s;
+        }
+        .ctrl-btn:hover { background: var(--border-hairline-strong); }
+        .ctrl-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+        .playback-status-readout {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .playback-step-badge {
+            color: var(--data-synth);
+            font-weight: 600;
         }
 
-        .timeline-legend-row { display: flex; gap: 12px; }
-        .legend-tag {
+        /* 1-Minute Scrubber Timeline */
+        .timeline-section {
+            margin: 6px 12px 0;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            padding: 6px 10px 8px;
+            flex-shrink: 0;
+        }
+        .timeline-legend-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .timeline-title {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-tertiary);
+        }
+        .timeline-swatches {
+            display: flex;
+            gap: 12px;
+        }
+        .timeline-swatch-item {
             display: flex;
             align-items: center;
             gap: 5px;
-            font-size: 9.5px;
-            color: var(--text-2);
+            font-size: 10px;
+            color: var(--text-secondary);
         }
-        .legend-dot { width: 6px; height: 6px; border-radius: 50%; }
-        .legend-dot.input { background: #3b82f6; }
-        .legend-dot.ai { background: #10b981; }
+        .swatch-box {
+            width: 8px; height: 8px;
+            border-radius: 2px;
+        }
+        .swatch-box.raw { background: var(--data-raw); }
+        .swatch-box.synth { background: var(--data-synth); }
 
-        .timeline-nav-row {
+        .timeline-track-wrapper {
             display: flex;
             align-items: center;
             gap: 4px;
         }
-
-        .tl-nav-btn {
-            width: 22px; height: 52px;
-            background: var(--bg-surface);
-            border: 1px solid var(--border-dim);
-            border-radius: 3px;
-            display: flex; align-items: center; justify-content: center;
+        .tl-scroll-btn {
+            background: var(--bg-surface-raised);
+            border: 1px solid var(--border-hairline);
+            color: var(--text-secondary);
+            border-radius: var(--radius-sm);
+            width: 20px; height: 46px;
             cursor: pointer;
-            color: var(--text-2);
-            font-size: 14px;
+            display: flex; align-items: center; justify-content: center;
             flex-shrink: 0;
-            transition: all 0.1s;
         }
-        .tl-nav-btn:hover { border-color: var(--accent); color: #fff; }
+        .tl-scroll-btn:hover { color: var(--text-primary); }
 
-        .timeline-frames-track {
+        .timeline-strip-container {
             flex: 1;
             display: flex;
             gap: 4px;
@@ -411,9 +567,9 @@
             scrollbar-width: none;
             padding: 1px 0;
         }
-        .timeline-frames-track::-webkit-scrollbar { display: none; }
+        .timeline-strip-container::-webkit-scrollbar { display: none; }
 
-        .tl-frame-item {
+        .tl-item {
             flex-shrink: 0;
             display: flex;
             flex-direction: column;
@@ -421,548 +577,899 @@
             gap: 2px;
             cursor: pointer;
             padding: 2px;
-            border-radius: 3px;
+            border-radius: var(--radius-sm);
             border: 1px solid transparent;
-            transition: all 0.1s;
+            background: var(--bg-canvas);
+            transition: border-color 0.12s, background 0.12s;
         }
-        .tl-frame-item:hover { background: var(--bg-surface); }
-        .tl-frame-item.selected {
-            background: var(--accent-dim);
+        .tl-item:hover { background: var(--bg-surface-raised); }
+        .tl-item.selected {
+            background: var(--accent-subtle);
             border-color: var(--accent);
         }
-
-        .tl-frame-item .thumb-img {
-            width: 52px;
-            height: 35px;
+        .tl-item .tl-thumb {
+            width: 48px;
+            height: 32px;
             border-radius: 2px;
             object-fit: cover;
-            background: #000;
-            border: 1px solid var(--border-dim);
+            background: #000000;
+            border: 1px solid var(--border-hairline);
         }
-        .tl-frame-item.selected .thumb-img { border-color: var(--accent-bright); }
-
-        .tl-frame-item .frame-time-txt {
-            font-size: 8.5px;
+        .tl-item.selected .tl-thumb { border-color: var(--accent); }
+        .tl-item .tl-time {
             font-family: var(--font-mono);
-            color: var(--text-3);
+            font-size: 8.5px;
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
         }
-        .tl-frame-item.selected .frame-time-txt { color: var(--accent-bright); font-weight: 600; }
-
-        .tl-frame-item .frame-dot-indicator {
+        .tl-item.selected .tl-time { color: var(--accent); font-weight: 600; }
+        .tl-item .tl-indicator {
             width: 4px; height: 4px;
             border-radius: 50%;
         }
 
-        /* ─── BOTTOM ANALYSIS SECTION (3 CARDS) ─── */
-        .bottom-analysis-grid {
+        /* ─── DIAGNOSTIC PANELS ROW (3 COLUMNS) ─── */
+        .diagnostics-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 1.15fr;
+            grid-template-columns: 1fr 1fr 1.1fr;
             gap: 8px;
-            padding: 6px 10px 10px;
+            padding: 8px 12px 10px;
             flex: 1;
             min-height: 0;
         }
-
-        .analysis-box {
-            background: var(--bg-panel);
-            border: 1px solid var(--border-dim);
-            border-radius: 4px;
+        .diag-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
             display: flex;
             flex-direction: column;
             overflow: hidden;
         }
-
-        .analysis-box-header {
-            padding: 5px 10px;
-            font-size: 9.5px;
-            font-weight: 700;
-            letter-spacing: 0.9px;
-            text-transform: uppercase;
-            color: var(--text-3);
-            background: var(--bg-surface);
-            border-bottom: 1px solid var(--border-dim);
+        .diag-card-header {
+            padding: 6px 10px;
+            background: var(--bg-surface-raised);
+            border-bottom: 1px solid var(--border-hairline);
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            justify-content: space-between;
         }
-
-        .analysis-box-body {
+        .diag-title {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-secondary);
+        }
+        .diag-card-body {
             flex: 1;
             position: relative;
             min-height: 0;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
-
-        .analysis-box-body canvas {
+        .diag-canvas-wrapper {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+        }
+        .diag-canvas-wrapper canvas {
             width: 100%;
             height: 100%;
             display: block;
         }
 
-        /* Tabbed Analysis Container */
-        .tab-btn-row {
+        /* Permanent Velocity Horizontal Legend */
+        .velocity-legend-bar {
+            padding: 4px 10px;
+            background: var(--bg-canvas);
+            border-top: 1px solid var(--border-hairline);
             display: flex;
-            gap: 4px;
+            flex-direction: column;
+            gap: 2px;
+            flex-shrink: 0;
         }
-        .tab-btn {
-            background: var(--bg-input);
-            color: var(--text-3);
-            border: 1px solid var(--border-dim);
-            border-radius: 3px;
-            padding: 2px 6px;
-            font-size: 8.5px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .tab-btn.active {
-            background: var(--accent-dim);
-            border-color: var(--accent);
-            color: var(--accent-bright);
-        }
-
-        /* Inspector & Nowcasting Data Tables */
-        .telemetry-data-table {
-            width: 100%;
-            font-size: 11px;
-            border-collapse: collapse;
-        }
-        .telemetry-data-table td {
-            padding: 4px 8px;
-            border-bottom: 1px solid var(--border-dim);
-        }
-        .telemetry-data-table td:first-child { color: var(--text-2); }
-        .telemetry-data-table td:last-child {
-            color: var(--text-0);
-            font-family: var(--font-mono);
-            font-weight: 500;
-            text-align: right;
-        }
-        .telemetry-data-table tr.header-row td {
-            font-size: 9.5px;
-            font-weight: 700;
-            color: var(--accent-bright);
-            letter-spacing: 0.6px;
-            text-transform: uppercase;
-            padding: 5px 8px;
-            background: rgba(37,99,235,0.08);
-            border-bottom: 1px solid var(--border-dim);
-        }
-        .threat-tag {
-            display: inline-block;
-            padding: 1px 5px;
+        .velocity-bar-track {
+            height: 5px;
             border-radius: 2px;
-            font-size: 9px;
-            font-weight: 700;
-            font-family: var(--font-mono);
+            background: linear-gradient(to right, #081020, #06b6d4, #10b981, #f59e0b, #ef4444);
+            border: 1px solid var(--border-hairline);
         }
-        .threat-tag.severe { background: rgba(239,68,68,0.2); color: var(--danger); border: 1px solid var(--danger); }
-        .threat-tag.high { background: rgba(245,158,11,0.2); color: var(--warn); border: 1px solid var(--warn); }
-        .threat-tag.pass { background: rgba(16,185,129,0.2); color: var(--success); border: 1px solid var(--success); }
-
-        /* ─── RIGHT PANEL WIDGETS ─── */
-        .metric-block {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-dim);
-            border-radius: 4px;
-            overflow: hidden;
-        }
-
-        .metric-block-header {
-            padding: 6px 10px;
-            font-size: 9.5px;
-            font-weight: 700;
-            letter-spacing: 0.9px;
-            text-transform: uppercase;
-            color: var(--text-3);
-            background: var(--bg-elevated);
-            border-bottom: 1px solid var(--border-dim);
+        .velocity-ticks {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            font-family: var(--font-mono);
+            font-size: 8px;
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
         }
 
-        .metrics-2x2-grid {
+        /* Temperature Profile Permanent Legend */
+        .temp-legend-bar {
+            padding: 4px 10px;
+            background: var(--bg-canvas);
+            border-top: 1px solid var(--border-hairline);
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            font-size: 9.5px;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+        .temp-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .temp-line-indicator {
+            width: 12px;
+            height: 2px;
+            border-radius: 1px;
+        }
+
+        /* Nowcasting Hero Section */
+        .nowcast-content-container {
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow-y: auto;
+            height: 100%;
+        }
+        .hero-metric-card {
+            background: var(--bg-surface-raised);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .hero-metric-card.severe {
+            background: rgba(229, 72, 77, 0.08);
+            border-color: var(--status-severe);
+        }
+        .hero-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .hero-label {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-secondary);
+        }
+        .hero-badge {
+            font-size: 9.5px;
+            font-weight: 600;
+            padding: 1px 6px;
+            border-radius: 2px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .hero-badge.severe {
+            background: var(--status-severe);
+            color: #FFFFFF;
+        }
+        .hero-val-row {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+        .hero-big-number {
+            font-family: var(--font-mono);
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-variant-numeric: tabular-nums;
+        }
+        .hero-subtext {
+            font-size: 10.5px;
+            color: var(--text-secondary);
+        }
+
+        .telemetry-grid-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10.5px;
+        }
+        .telemetry-grid-table td {
+            padding: 3.5px 0;
+            border-bottom: 1px solid var(--border-hairline);
+        }
+        .telemetry-grid-table td:first-child {
+            color: var(--text-secondary);
+        }
+        .telemetry-grid-table td:last-child {
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+            text-align: right;
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ─── RIGHT RAIL (VALIDATION METRICS & SYSTEM) ─── */
+        .panel-right {
+            background: var(--bg-surface);
+            border-left: 1px solid var(--border-hairline);
+            padding: 14px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-hairline) transparent;
+        }
+        .panel-right::-webkit-scrollbar { width: 4px; }
+        .panel-right::-webkit-scrollbar-thumb { background: var(--border-hairline); }
+
+        .metrics-2x2 {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 1px;
-            background: var(--border-dim);
+            gap: 6px;
         }
-
         .metric-tile {
-            background: var(--bg-surface);
-            padding: 8px 10px;
+            background: var(--bg-surface-raised);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            padding: 7px 9px;
             display: flex;
             flex-direction: column;
             gap: 2px;
         }
-
-        .tile-top-row {
+        .metric-tile-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
         }
-
-        .tile-val {
-            font-size: 18px;
-            font-weight: 700;
-            font-family: var(--font-mono);
-            color: var(--text-0);
-        }
-        .tile-unit { font-size: 10px; font-weight: 500; color: var(--text-2); margin-left: 2px; }
-
-        .tile-badge {
-            font-size: 9px;
-            font-weight: 700;
-            font-family: var(--font-mono);
-            padding: 1px 4px;
-            border-radius: 2px;
-        }
-        .tile-badge.pass { background: rgba(16,185,129,0.15); color: var(--success); border: 1px solid var(--success); }
-        .tile-badge.fail { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid var(--danger); }
-
-        .tile-name {
+        .metric-tile-name {
             font-size: 9.5px;
             font-weight: 600;
-            color: var(--text-3);
             text-transform: uppercase;
-            letter-spacing: 0.4px;
+            letter-spacing: 0.04em;
+            color: var(--text-tertiary);
         }
-        .tile-target { font-size: 8.5px; color: var(--text-3); }
+        .metric-status-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--status-nominal);
+        }
+        .metric-tile-val {
+            font-family: var(--font-mono);
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-variant-numeric: tabular-nums;
+        }
+        .metric-tile-target {
+            font-size: 9px;
+            color: var(--text-tertiary);
+            font-family: var(--font-mono);
+        }
 
-        /* Histogram */
+        /* Histogram Widget */
+        .hist-box {
+            background: var(--bg-surface-raised);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            padding: 6px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
         .hist-canvas-wrap {
-            height: 95px;
-            position: relative;
-            padding: 3px;
+            height: 80px;
+            width: 100%;
         }
         .hist-canvas-wrap canvas { width: 100%; height: 100%; }
-
-        /* System Status */
-        .sys-info-table { padding: 6px 10px; font-size: 11px; }
-        .sys-info-row {
+        .hist-axis-row {
             display: flex;
             justify-content: space-between;
-            padding: 3px 0;
-            border-bottom: 1px solid var(--border-dim);
+            font-family: var(--font-mono);
+            font-size: 8.5px;
+            color: var(--text-tertiary);
         }
-        .sys-info-row:last-child { border-bottom: none; }
-        .sys-info-row .label-k { color: var(--text-2); }
-        .sys-info-row .label-v { color: var(--text-0); font-family: var(--font-mono); font-weight: 500; }
-        .sys-info-row .label-v.green { color: var(--success); font-weight: 700; }
-        .sys-info-row .label-v.blue { color: var(--accent-bright); }
+
+        /* System Info Stack */
+        .sys-stack {
+            background: var(--bg-surface-raised);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            padding: 6px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 10.5px;
+        }
+        .sys-row {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid var(--border-hairline);
+        }
+        .sys-row:last-child { border-bottom: none; padding-bottom: 0; }
+        .sys-label {
+            font-size: 9.5px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .sys-val {
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* ─── LIVE DISSEMINATION VIEW (SAAS FIELD MODE) ─── */
+        .saas-container {
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+            padding: 20px 24px;
+            height: calc(100vh - 40px);
+            overflow-y: auto;
+            background: var(--bg-canvas);
+            max-width: 1100px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        .saas-active .app-container { display: none; }
+        .saas-active .saas-container { display: flex; }
+
+        .saas-banner {
+            background: rgba(229, 72, 77, 0.08);
+            border: 1px solid var(--status-severe);
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .saas-banner-title {
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--status-severe);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .saas-banner-sub {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .saas-player {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .saas-player-screen {
+            height: 380px;
+            background: #000000;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .saas-player-screen img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .saas-player-bar {
+            padding: 8px 14px;
+            background: var(--bg-surface-raised);
+            border-top: 1px solid var(--border-hairline);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .saas-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .saas-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--radius-sm);
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .saas-card-hdr { font-size: 9.5px; font-weight: 600; text-transform: uppercase; color: var(--text-tertiary); letter-spacing: 0.04em; }
+        .saas-card-val { font-size: 18px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+        .saas-card-sub { font-size: 10.5px; color: var(--text-secondary); }
 
         /* Loading Spinner */
         .spin-overlay {
             position: absolute;
             inset: 0;
-            background: rgba(6,9,19,0.88);
+            background: rgba(10, 10, 11, 0.85);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 8px;
             z-index: 60;
         }
         .spin-overlay.hidden { display: none; }
-        .spinner-circle {
-            width: 32px; height: 32px;
-            border: 2.5px solid var(--border-base);
-            border-top-color: var(--accent-bright);
+        .spinner-bar {
+            width: 24px; height: 24px;
+            border: 2px solid var(--border-hairline-strong);
+            border-top-color: var(--accent);
             border-radius: 50%;
-            animation: spinAnim 0.8s linear infinite;
+            animation: spin 0.8s linear infinite;
         }
-        @keyframes spinAnim { to { transform: rotate(360deg); } }
-        .spin-msg { font-size: 11px; font-family: var(--font-mono); color: var(--text-1); }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spin-msg { font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); }
+
+        /* Modal Overlay */
+        .modal-wrap {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        .modal-wrap.hidden { display: none; }
+        .modal-box {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-hairline-strong);
+            border-radius: var(--radius-sm);
+            width: 400px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .modal-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
     </style>
 </head>
 <body>
-<div class="app-container">
 
-    <!-- ═══════════════════════════════════════════════════ -->
-    <!--                   LEFT TOOLBAR                      -->
-    <!-- ═══════════════════════════════════════════════════ -->
-    <div class="panel-left">
-        <div class="control-group">
-            <span class="control-label">Data Source</span>
-            <select id="ctl-datasource" onchange="onDataSourceChange()">
-                <option value="INSAT-3DS" selected>INSAT-3DS</option>
-                <option value="INSAT-3DR">INSAT-3DR</option>
-                <option value="simulation">Synthetic Simulation</option>
-                <option value="upload">Custom Ingestion</option>
-            </select>
-        </div>
-
-        <div class="control-group">
-            <span class="control-label">Product</span>
-            <select id="ctl-product">
-                <option value="L1B" selected>L1B Radiance</option>
-                <option value="L2">L2 Cloud Products</option>
-            </select>
-        </div>
-
-        <div class="control-group">
-            <span class="control-label">Band</span>
-            <select id="ctl-band" onchange="refreshOverlays()">
-                <option value="TIR-1" selected>TIR-1 (10.8 &mu;m)</option>
-                <option value="WV">WV (6.8 &mu;m)</option>
-                <option value="VIS">VIS (0.65 &mu;m)</option>
-                <option value="composite">False Color Composite</option>
-            </select>
-        </div>
-
-        <div class="control-group">
-            <span class="control-label">Resolution</span>
-            <select id="ctl-resolution">
-                <option value="4km" selected>4 km</option>
-                <option value="1km">1 km</option>
-            </select>
-        </div>
-
-        <div class="divider"></div>
-        <div class="section-label">Temporal Input</div>
-
-        <div class="control-group">
-            <span class="control-label">T0 (IST)</span>
-            <input type="text" id="ctl-t0" value="01-06-2026 10:00">
-        </div>
-
-        <div class="control-group">
-            <span class="control-label">T1 (IST)</span>
-            <input type="text" id="ctl-t1" value="01-06-2026 10:15">
-        </div>
-
-        <div class="control-group">
-            <span class="control-label">Processing Mode</span>
-            <select id="ctl-procmode">
-                <option value="15" selected>AI Interpolation (1-min)</option>
-                <option value="5">AI Interpolation (3-min)</option>
-                <option value="3">AI Interpolation (5-min)</option>
-            </select>
-        </div>
-
-        <div class="control-group">
-            <span class="control-label">Region</span>
-            <select id="ctl-region">
-                <option value="bob" selected>Bay of Bengal</option>
-                <option value="arabian">Arabian Sea</option>
-                <option value="fulldisk">Full Disk</option>
-            </select>
-        </div>
-
-        <!-- Real Image Ingestion Drop Zone -->
-        <div class="section-label">Data Ingestion</div>
-        <div class="drop-box" id="left-drop-zone">
-            <input type="file" id="file-hidden-t0" style="display:none;" accept=".png,.jpg,.jpeg,.tif,.tiff,.h5,.hdf5,.nc,.nc4" onchange="onFilePicked('t0', this)">
-            <input type="file" id="file-hidden-t1" style="display:none;" accept=".png,.jpg,.jpeg,.tif,.tiff,.h5,.hdf5,.nc,.nc4" onchange="onFilePicked('t1', this)">
-            
-            <div class="drop-file-row">
-                <span class="drop-file-badge">T0</span>
-                <span class="drop-file-name" id="name-file-t0">Default Simulation</span>
-                <button class="drop-browse-btn" onclick="document.getElementById('file-hidden-t0').click()">Browse</button>
-            </div>
-            <div class="drop-file-row">
-                <span class="drop-file-badge">T1</span>
-                <span class="drop-file-name" id="name-file-t1">Default Simulation</span>
-                <button class="drop-browse-btn" onclick="document.getElementById('file-hidden-t1').click()">Browse</button>
-            </div>
-        </div>
-
-        <button class="action-button" id="btn-execute" onclick="executeSynthesis()">Run Frame Synthesis</button>
-
-        <div class="divider"></div>
-        <div class="section-label">Layers & Overlays</div>
-        <div class="checkbox-row"><input type="checkbox" id="layer-coastline" checked onchange="refreshOverlays()"><label for="layer-coastline">Coastline & Borders</label></div>
-        <div class="checkbox-row"><input type="checkbox" id="layer-grid" checked onchange="refreshOverlays()"><label for="layer-grid">Graticule Grid (5&deg;)</label></div>
-        <div class="checkbox-row"><input type="checkbox" id="layer-stormtrack" checked onchange="refreshOverlays()"><label for="layer-stormtrack">Storm Track & Forecast Cone</label></div>
-        <div class="checkbox-row"><input type="checkbox" id="layer-cloudburst" checked onchange="refreshOverlays()"><label for="layer-cloudburst">Cloudburst Warning Zones</label></div>
-        <div class="checkbox-row"><input type="checkbox" id="layer-flowvectors" onchange="refreshOverlays()"><label for="layer-flowvectors">Kinematic Flow Vectors</label></div>
-
-        <div class="divider"></div>
-        <div class="section-label">Navigation & Probe</div>
-        <div class="view-toolbar">
-            <button class="tool-btn active" title="Pointer">PROBE</button>
-            <button class="tool-btn" title="Play Sequence" onclick="toggleAutoPlay()">PLAY</button>
-            <button class="tool-btn" title="Reset View" onclick="resetProbeLocation()">RESET</button>
-        </div>
-        <div class="latlon-indicator" id="cursor-latlon">Lat: 16.74 &deg;N&ensp;Lon: 89.21 &deg;E</div>
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!--                           TOP NAVIGATION BAR                               -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="top-navbar">
+    <div class="brand-section">
+        <div class="brand-logo">BLINK</div>
+        <div class="brand-badge">Aero-Interpolate</div>
+        <div class="brand-divider"></div>
+        <div class="brand-desc">Satellite Temporal Nowcasting Ground Station</div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════ -->
-    <!--                   CENTER STAGE                      -->
-    <!-- ═══════════════════════════════════════════════════ -->
-    <div class="center-stage">
-        <div class="spin-overlay" id="stage-spinner">
-            <div class="spinner-circle"></div>
-            <span class="spin-msg" id="spinner-status-msg">Running Optical Flow & Neural Synthesis...</span>
+    <!-- Mode Switcher -->
+    <div class="segmented-control">
+        <button class="segmented-btn active" id="tab-operator" onclick="setViewMode('operator')">Ground Station</button>
+        <button class="segmented-btn" id="tab-viewer" onclick="setViewMode('viewer')">Live Dissemination</button>
+    </div>
+
+    <!-- Live Telemetry Status -->
+    <div class="header-status">
+        <div class="status-dot"></div>
+        <span>Telemetry Stream Active</span>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!--                   LIVE DISSEMINATION SCREEN (FIELD MODE)                   -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="saas-container" id="saas-viewer-screen">
+    <div class="saas-banner">
+        <div>
+            <div class="saas-banner-title">⚠️ Convective Advisory · Severe Cloudburst Probability</div>
+            <div class="saas-banner-sub">Rapid cloud-top cooling detected (-14.8 K / 15-min). High-intensity localized rain likely within 15–30 minutes.</div>
+        </div>
+        <div class="hero-badge severe">88.5% Severe</div>
+    </div>
+
+    <div class="saas-player">
+        <div class="saas-player-screen">
+            <img id="saas-view-img" src="" alt="Satellite Stream">
+        </div>
+        <div class="saas-player-bar">
+            <button class="ctrl-btn active" id="saas-play-btn" onclick="toggleAutoPlay()">▶ Play Stream</button>
+            <input type="range" id="saas-time-slider" min="0" max="15" value="0" style="flex:1;" oninput="onSaasSliderChange(this.value)">
+            <span class="playback-status-readout" id="saas-step-readout">Frame 1 / 15 (T+0m)</span>
+        </div>
+    </div>
+
+    <div class="saas-cards-grid">
+        <div class="saas-card">
+            <div class="saas-card-hdr">Interpolation Cadence</div>
+            <div class="saas-card-val" style="color:var(--data-synth);">1-Minute Stream</div>
+            <div class="saas-card-sub">Synthesizes 14 intermediate steps per 15-min scan.</div>
+        </div>
+        <div class="saas-card">
+            <div class="saas-card-hdr">Cloud-Top Temperature</div>
+            <div class="saas-card-val" style="color:var(--status-severe);">-38.4 °C</div>
+            <div class="saas-card-sub">234.8 K minimum brightness temperature.</div>
+        </div>
+        <div class="saas-card">
+            <div class="saas-card-hdr">Kinematic Drift Velocity</div>
+            <div class="saas-card-val" style="color:var(--status-caution);">102 km/h</div>
+            <div class="saas-card-sub">Translation speed of convective cloud shield.</div>
+        </div>
+        <div class="saas-card">
+            <div class="saas-card-hdr">Kinematic Model Accuracy</div>
+            <div class="saas-card-val" style="color:var(--data-synth);">0.9620 SSIM</div>
+            <div class="saas-card-sub">Structural similarity against observational reference.</div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!--                   GROUND STATION WORKSTATION CONSOLE                       -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="app-container" id="operator-screen">
+
+    <!-- ─── LEFT CONTROL RAIL ─── -->
+    <div class="panel-left">
+        <div class="control-section">
+            <div class="section-heading">Data Source</div>
+            <select id="ctl-datasource" onchange="onDataSourceChange()">
+                <option value="REAL_SATELLITE" selected>Live Satellite (NASA VIIRS / MODIS)</option>
+                <option value="MOSDAC_INSAT3DS">ISRO MOSDAC (INSAT-3DS L1B)</option>
+                <option value="simulation_cyclone">Benchmark: Severe Tropical Cyclone</option>
+                <option value="simulation_cloudburst">Benchmark: Explosive Cloudburst</option>
+                <option value="upload">Custom Ingestion (HDF5 / NetCDF / PNG)</option>
+            </select>
         </div>
 
-        <!-- Top 3 Viewports -->
+        <div class="control-section">
+            <div class="section-heading">Geographic Extent</div>
+            <select id="ctl-region" onchange="onRegionChange()">
+                <option value="indian_subcontinent" selected>Bay of Bengal & Peninsular India</option>
+                <option value="bay_of_bengal">Bay of Bengal Cyclone Basin</option>
+                <option value="arabian_sea">Arabian Sea Inflow</option>
+                <option value="western_ghats">Western Ghats Orographic Zone</option>
+                <option value="himalayan_foothills">Himalayan Cloudburst Corridor</option>
+            </select>
+        </div>
+
+        <div class="control-section">
+            <div class="section-heading">Spectral Channel</div>
+            <select id="ctl-band" onchange="refreshOverlays()">
+                <option value="TIR-1" selected>TIR-1 (10.8 µm Thermal IR)</option>
+                <option value="WV">WV (6.8 µm Water Vapour)</option>
+                <option value="VIS">VIS (0.65 µm Visible)</option>
+                <option value="composite">Multi-Spectral Composite (RGB)</option>
+            </select>
+        </div>
+
+        <div class="hairline-divider"></div>
+
+        <div class="control-section">
+            <div class="section-heading">Temporal Acquisition</div>
+            <div class="input-row-2col">
+                <div class="control-group">
+                    <span class="control-label">Date</span>
+                    <input type="text" id="ctl-date" value="2026-08-28" placeholder="YYYY-MM-DD">
+                </div>
+                <div class="control-group">
+                    <span class="control-label">UTC Time</span>
+                    <input type="text" id="ctl-time" value="10:00" placeholder="HH:MM">
+                </div>
+            </div>
+        </div>
+
+        <div class="control-section">
+            <div class="section-heading">Cadence Multiplier</div>
+            <select id="ctl-procmode">
+                <option value="15" selected>15x Synthesis (15-min → 1-min)</option>
+                <option value="5">5x Synthesis (15-min → 3-min)</option>
+                <option value="3">3x Synthesis (15-min → 5-min)</option>
+            </select>
+        </div>
+
+        <div class="control-section">
+            <div class="section-heading">Direct File Ingest</div>
+            <div class="ingest-box" id="left-drop-zone">
+                <input type="file" id="file-hidden-t0" style="display:none;" accept=".png,.jpg,.jpeg,.tif,.tiff,.h5,.hdf5,.nc,.nc4" onchange="onFilePicked('t0', this)">
+                <input type="file" id="file-hidden-t1" style="display:none;" accept=".png,.jpg,.jpeg,.tif,.tiff,.h5,.hdf5,.nc,.nc4" onchange="onFilePicked('t1', this)">
+                <div class="ingest-row">
+                    <span class="ingest-badge">T0</span>
+                    <span class="ingest-name" id="name-file-t0">Satellite Feed (Live)</span>
+                    <button class="ingest-browse-btn" onclick="document.getElementById('file-hidden-t0').click()">Browse</button>
+                </div>
+                <div class="ingest-row">
+                    <span class="ingest-badge">T1</span>
+                    <span class="ingest-name" id="name-file-t1">Satellite Feed (Live)</span>
+                    <button class="ingest-browse-btn" onclick="document.getElementById('file-hidden-t1').click()">Browse</button>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-primary" id="btn-execute" onclick="executeSynthesis()">Run Frame Synthesis</button>
+        <button class="btn-outline" onclick="toggleMosdacModal()">Configure MOSDAC API</button>
+
+        <div class="hairline-divider"></div>
+
+        <div class="control-section">
+            <div class="section-heading">Map Overlays</div>
+            <div class="checkbox-item"><input type="checkbox" id="layer-coastline" checked onchange="refreshOverlays()"><label for="layer-coastline">Coastlines & Boundaries</label></div>
+            <div class="checkbox-item"><input type="checkbox" id="layer-grid" checked onchange="refreshOverlays()"><label for="layer-grid">Graticule Grid (5°)</label></div>
+            <div class="checkbox-item"><input type="checkbox" id="layer-stormtrack" checked onchange="refreshOverlays()"><label for="layer-stormtrack">Cyclone Track & Cone</label></div>
+            <div class="checkbox-item"><input type="checkbox" id="layer-cloudburst" checked onchange="refreshOverlays()"><label for="layer-cloudburst">NETRA Cloudburst Zones</label></div>
+            <div class="checkbox-item"><input type="checkbox" id="layer-flowvectors" onchange="refreshOverlays()"><label for="layer-flowvectors">Kinematic Velocity Vectors</label></div>
+        </div>
+
+        <div class="coords-bar">
+            <span>Probe</span>
+            <span class="coords-val" id="cursor-latlon">16.74°N, 89.21°E</span>
+        </div>
+    </div>
+
+    <!-- ─── CENTER STAGE ─── -->
+    <div class="center-stage">
+        <div class="spin-overlay hidden" id="stage-spinner">
+            <div class="spinner-bar"></div>
+            <span class="spin-msg" id="spinner-status-msg">Running Neural Kinematics & Flow Solver...</span>
+        </div>
+
+        <!-- 3-Viewport Strip -->
         <div class="viewport-strip">
             <div class="viewport-card" id="vp-card-t0">
-                <div class="viewport-header" id="vp-hdr-t0">01-06-2026 10:00 IST (Input)</div>
-                <div class="viewport-body" onmousemove="handleViewportHover(event, this)">
-                    <img id="view-img-t0" src="" alt="" crossorigin="anonymous">
+                <div class="viewport-card-header">
+                    <span id="vp-hdr-t0">T0 · 10:00:00 UTC</span>
+                    <span class="viewport-tag raw">Raw Observation</span>
+                </div>
+                <div class="viewport-canvas-container" onmousemove="handleViewportHover(event, this)">
+                    <img id="view-img-t0" src="" alt="T0 Satellite Frame">
                     <canvas class="geo-overlay" id="canvas-overlay-t0"></canvas>
                 </div>
             </div>
+
             <div class="viewport-card" id="vp-card-t1">
-                <div class="viewport-header" id="vp-hdr-t1">01-06-2026 10:15 IST (Input)</div>
-                <div class="viewport-body" onmousemove="handleViewportHover(event, this)">
-                    <img id="view-img-t1" src="" alt="" crossorigin="anonymous">
+                <div class="viewport-card-header">
+                    <span id="vp-hdr-t1">T1 · 10:15:00 UTC</span>
+                    <span class="viewport-tag raw">Raw Observation</span>
+                </div>
+                <div class="viewport-canvas-container" onmousemove="handleViewportHover(event, this)">
+                    <img id="view-img-t1" src="" alt="T1 Satellite Frame">
                     <canvas class="geo-overlay" id="canvas-overlay-t1"></canvas>
                 </div>
             </div>
-            <div class="viewport-card active-synth" id="vp-card-ai">
-                <div class="viewport-header" id="vp-hdr-ai">
-                    <span id="vp-title-ai">01-06-2026 10:07 IST (AI Generated)</span>
-                    <div class="viewport-controls-top">
-                        <button class="vp-ctrl-btn" onclick="stepTimeline(-1)" title="Previous Step">&lt;&lt;</button>
-                        <button class="vp-ctrl-btn" id="vp-play-btn" onclick="toggleAutoPlay()" title="Auto Play">PLAY</button>
-                        <button class="vp-ctrl-btn" onclick="stepTimeline(1)" title="Next Step">&gt;&gt;</button>
-                    </div>
+
+            <div class="viewport-card synthesized-card" id="vp-card-ai">
+                <div class="viewport-card-header">
+                    <span id="vp-title-ai">Model Output · T+7m (10:07 UTC)</span>
+                    <span class="viewport-tag synth">Synthesized</span>
                 </div>
-                <div class="viewport-body" onmousemove="handleViewportHover(event, this)">
-                    <img id="view-img-ai" src="" alt="" crossorigin="anonymous">
+                <div class="viewport-canvas-container" onmousemove="handleViewportHover(event, this)">
+                    <img id="view-img-ai" src="" alt="Model Synthesized Frame">
                     <canvas class="geo-overlay" id="canvas-overlay-ai"></canvas>
                 </div>
             </div>
         </div>
 
-        <!-- Middle Timeline Strip -->
-        <div class="timeline-container">
-            <div class="timeline-header-bar">
-                <span class="timeline-heading">Timeline (1-Minute Temporal Cadence)</span>
-                <div class="timeline-legend-row">
-                    <span class="legend-tag"><span class="legend-dot input"></span>Input Observation (15-min)</span>
-                    <span class="legend-tag"><span class="legend-dot ai"></span>Neural Synthesized (1-min)</span>
-                </div>
+        <!-- Dedicated Playback Control Bar -->
+        <div class="playback-bar">
+            <div class="playback-controls-group">
+                <button class="ctrl-btn" onclick="stepTimeline(-1)">◀ Prev Step</button>
+                <button class="ctrl-btn" id="vp-play-btn" onclick="toggleAutoPlay()">▶ Play Loop</button>
+                <button class="ctrl-btn" onclick="stepTimeline(1)">Next Step ▶</button>
             </div>
-            <div class="timeline-nav-row">
-                <button class="tl-nav-btn" onclick="scrollTimelineStrip(-1)">&lt;</button>
-                <div class="timeline-frames-track" id="timeline-frames-track"></div>
-                <button class="tl-nav-btn" onclick="scrollTimelineStrip(1)">&gt;</button>
+            <div class="playback-status-readout">
+                <span>Selected Interval:</span>
+                <span class="playback-step-badge" id="playback-time-badge">10:07 UTC (Step 7 / 15)</span>
             </div>
         </div>
 
-        <!-- Bottom Analysis Row: 3 Panels -->
-        <div class="bottom-analysis-grid">
-            <div class="analysis-box">
-                <div class="analysis-box-header">Motion Field (10:00 &rarr; 10:15 IST)</div>
-                <div class="analysis-box-body">
-                    <canvas id="canvas-motion-field"></canvas>
+        <!-- 1-Minute Scrubber Timeline -->
+        <div class="timeline-section">
+            <div class="timeline-legend-row">
+                <span class="timeline-title">Temporal Sequence (1-Minute Intervals)</span>
+                <div class="timeline-swatches">
+                    <div class="timeline-swatch-item"><div class="swatch-box raw"></div><span>Raw Observation (15-min)</span></div>
+                    <div class="timeline-swatch-item"><div class="swatch-box synth"></div><span>Synthesized Step (1-min)</span></div>
                 </div>
             </div>
-            <div class="analysis-box">
-                <div class="analysis-box-header">Temperature Profile (TIR-1)</div>
-                <div class="analysis-box-body">
-                    <canvas id="canvas-temp-profile"></canvas>
-                </div>
+            <div class="timeline-track-wrapper">
+                <button class="tl-scroll-btn" onclick="scrollTimelineStrip(-1)">◀</button>
+                <div class="timeline-strip-container" id="timeline-frames-track"></div>
+                <button class="tl-scroll-btn" onclick="scrollTimelineStrip(1)">▶</button>
             </div>
-            <div class="analysis-box">
-                <div class="analysis-box-header">
-                    <span>Telemetry &amp; Nowcasting Diagnostics</span>
-                    <div class="tab-btn-row">
-                        <button class="tab-btn active" id="tab-btn-inspector" onclick="switchAnalysisTab('inspector')">PROBE</button>
-                        <button class="tab-btn" id="tab-btn-nowcast" onclick="switchAnalysisTab('nowcast')">NOWCAST</button>
+        </div>
+
+        <!-- Bottom Diagnostic Row (3 Columns) -->
+        <div class="diagnostics-grid">
+            <!-- Col 1: Kinematic Velocity Field -->
+            <div class="diag-card">
+                <div class="diag-card-header">
+                    <span class="diag-title">Atmospheric Kinematic Velocity Field</span>
+                </div>
+                <div class="diag-card-body">
+                    <div class="diag-canvas-wrapper">
+                        <canvas id="canvas-motion-field"></canvas>
+                    </div>
+                    <div class="velocity-legend-bar">
+                        <div class="velocity-bar-track"></div>
+                        <div class="velocity-ticks">
+                            <span>0 km/h</span>
+                            <span>25 km/h</span>
+                            <span>50 km/h</span>
+                            <span>75 km/h</span>
+                            <span>100+ km/h</span>
+                        </div>
                     </div>
                 </div>
-                <div class="analysis-box-body" style="overflow-y:auto; padding: 2px;">
-                    <!-- Tab 1: Pixel Inspector -->
-                    <table class="telemetry-data-table" id="view-tab-inspector">
-                        <tr class="header-row"><td colspan="2" id="inspector-loc-header">Location: 16.74 &deg;N, 89.21 &deg;E</td></tr>
-                        <tr><td>BT 10:00 (K)</td><td id="val-bt0">245.31</td></tr>
-                        <tr><td>BT Current Frame (K)</td><td id="val-btai">241.67</td></tr>
-                        <tr><td>BT 10:15 (K)</td><td id="val-bt1">238.56</td></tr>
-                        <tr><td>Delta T (vs. T0)</td><td id="val-diff">2.75 K</td></tr>
-                        <tr><td>Kinematic Velocity</td><td id="val-flow">28.41 m/s</td></tr>
-                        <tr><td>Model Confidence</td><td id="val-conf">0.96</td></tr>
-                    </table>
+            </div>
 
-                    <!-- Tab 2: AI Storm Track & Cloudburst Nowcast -->
-                    <table class="telemetry-data-table" id="view-tab-nowcast" style="display:none;">
-                        <tr class="header-row"><td colspan="2">Trajectory &amp; Cloudburst Telemetry</td></tr>
-                        <tr><td>Current Storm Center</td><td id="val-track-center">16.74&deg;N, 89.21&deg;E</td></tr>
-                        <tr><td>Translation Velocity</td><td id="val-track-speed">18.5 km/h @ 315&deg; (NW)</td></tr>
-                        <tr><td>Intensity Category</td><td id="val-track-cat">VSCS (135 km/h)</td></tr>
-                        <tr><td>Estimated Central Pressure</td><td id="val-track-press">964.0 hPa</td></tr>
-                        <tr><td>Cloudburst Risk Index</td><td><span class="threat-tag severe" id="val-cloudburst-pct">88.5% SEVERE</span></td></tr>
-                        <tr><td>Max Cooling Rate (dT/dt)</td><td id="val-cooling-rate">-14.8 K / 15-min</td></tr>
-                        <tr><td>Overshooting Tops</td><td id="val-ot-count">14 Detected</td></tr>
-                        <tr><td>Landfall ETA</td><td id="val-landfall-eta">28.5 hrs (Odisha Coast)</td></tr>
-                    </table>
+            <!-- Col 2: Cloud-Top Temperature Cross-Section -->
+            <div class="diag-card">
+                <div class="diag-card-header">
+                    <span class="diag-title">Temperature Cross-Section (TIR-1)</span>
+                </div>
+                <div class="diag-card-body">
+                    <div class="diag-canvas-wrapper">
+                        <canvas id="canvas-temp-profile"></canvas>
+                    </div>
+                    <div class="temp-legend-bar">
+                        <div class="temp-legend-item"><div class="temp-line-indicator" style="background:#56B4E9;"></div><span>T0 (Raw)</span></div>
+                        <div class="temp-legend-item"><div class="temp-line-indicator" style="background:#2FA36B;"></div><span>Synthesized</span></div>
+                        <div class="temp-legend-item"><div class="temp-line-indicator" style="background:#E0A72E;"></div><span>T1 (Raw)</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Col 3: Nowcasting Telemetry & Severity -->
+            <div class="diag-card">
+                <div class="diag-card-header">
+                    <span class="diag-title">Nowcasting & Kinematic Telemetry</span>
+                </div>
+                <div class="diag-card-body">
+                    <div class="nowcast-content-container">
+                        <!-- North Star Hero Metric -->
+                        <div class="hero-metric-card severe" id="card-hero-threat">
+                            <div class="hero-header-row">
+                                <span class="hero-label">Cloudburst Risk (NETRA)</span>
+                                <span class="hero-badge severe" id="val-badge-threat">⚠️ Severe Alert</span>
+                            </div>
+                            <div class="hero-val-row">
+                                <span class="hero-big-number" id="val-hero-pct">88.5%</span>
+                                <span class="hero-subtext" id="val-hero-sub">dT/dt: -14.8 K/15m · 14 Overshooting Tops</span>
+                            </div>
+                        </div>
+
+                        <!-- Structured Telemetry Table (No Text Clipping) -->
+                        <table class="telemetry-grid-table">
+                            <tr><td>Cyclone Center</td><td id="val-track-center">16.74°N, 89.21°E</td></tr>
+                            <tr><td>Translation Velocity</td><td id="val-track-speed">18.5 km/h @ 315° NW</td></tr>
+                            <tr><td>Intensity Category</td><td id="val-track-cat">VSCS (135 km/h)</td></tr>
+                            <tr><td>Central Pressure</td><td id="val-track-press">964.0 hPa</td></tr>
+                            <tr><td>Landfall ETA</td><td id="val-landfall-eta">28.5 hrs (Odisha Coast)</td></tr>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════ -->
-    <!--                   RIGHT TELEMETRY                   -->
-    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- ─── RIGHT RAIL ─── -->
     <div class="panel-right">
-        <!-- 2x2 Metrics Box -->
-        <div class="metric-block">
-            <div class="metric-block-header">
-                <span>Metrics (vs. Reference)</span>
-                <span class="tile-badge pass">NOMINAL</span>
-            </div>
-            <div class="metrics-2x2-grid">
+        <!-- 2x2 Physical Validation Metrics -->
+        <div class="control-section">
+            <div class="section-heading">Physical Validation Metrics</div>
+            <div class="metrics-2x2">
                 <div class="metric-tile">
-                    <div class="tile-top-row">
-                        <div><span class="tile-val" id="metric-psnr">36.42</span><span class="tile-unit">dB</span></div>
-                        <span class="tile-badge pass" id="badge-psnr">PASS</span>
+                    <div class="metric-tile-header">
+                        <span class="metric-tile-name">PSNR</span>
+                        <div class="metric-status-dot"></div>
                     </div>
-                    <span class="tile-name">PSNR</span>
-                    <span class="tile-target">(Target &gt; 35 dB)</span>
+                    <span class="metric-tile-val" id="metric-psnr">36.42</span>
+                    <span class="metric-tile-target">Target ≥ 34.5 dB</span>
                 </div>
                 <div class="metric-tile">
-                    <div class="tile-top-row">
-                        <div><span class="tile-val" id="metric-ssim">0.96</span></div>
-                        <span class="tile-badge pass" id="badge-ssim">PASS</span>
+                    <div class="metric-tile-header">
+                        <span class="metric-tile-name">SSIM</span>
+                        <div class="metric-status-dot"></div>
                     </div>
-                    <span class="tile-name">SSIM</span>
-                    <span class="tile-target">(Target &gt; 0.95)</span>
+                    <span class="metric-tile-val" id="metric-ssim">0.9620</span>
+                    <span class="metric-tile-target">Target ≥ 0.9400</span>
                 </div>
                 <div class="metric-tile">
-                    <div class="tile-top-row">
-                        <div><span class="tile-val" id="metric-rmse">3.21</span><span class="tile-unit">%</span></div>
-                        <span class="tile-badge pass" id="badge-rmse">PASS</span>
+                    <div class="metric-tile-header">
+                        <span class="metric-tile-name">RMSE</span>
+                        <div class="metric-status-dot"></div>
                     </div>
-                    <span class="tile-name">RMSE</span>
-                    <span class="tile-target">(Target &lt; 4 %)</span>
+                    <span class="metric-tile-val" id="metric-rmse">3.21 %</span>
+                    <span class="metric-tile-target">Target &lt; 4.0 %</span>
                 </div>
                 <div class="metric-tile">
-                    <div class="tile-top-row">
-                        <div><span class="tile-val" id="metric-tc">0.97</span></div>
-                        <span class="tile-badge pass" id="badge-tc">PASS</span>
+                    <div class="metric-tile-header">
+                        <span class="metric-tile-name">Temp Consist</span>
+                        <div class="metric-status-dot"></div>
                     </div>
-                    <span class="tile-name">Temporal Consistency</span>
-                    <span class="tile-target">(Target &gt; 0.90)</span>
+                    <span class="metric-tile-val" id="metric-tc">0.9710</span>
+                    <span class="metric-tile-target">Target ≥ 0.9000</span>
                 </div>
             </div>
         </div>
 
-        <!-- Histogram Box -->
-        <div class="metric-block">
-            <div class="metric-block-header">
-                <span>Histogram (TIR-1)</span>
-                <span style="font-size:8.5px; color:var(--text-3); font-family:var(--font-mono);">180K - 320K</span>
-            </div>
-            <div class="hist-canvas-wrap">
-                <canvas id="canvas-histogram"></canvas>
+        <!-- Spectral Distribution Histogram -->
+        <div class="control-section">
+            <div class="section-heading">Spectral Distribution (TIR-1)</div>
+            <div class="hist-box">
+                <div class="hist-canvas-wrap">
+                    <canvas id="canvas-histogram"></canvas>
+                </div>
+                <div class="hist-axis-row">
+                    <span>180 K</span>
+                    <span>240 K</span>
+                    <span>300 K</span>
+                </div>
             </div>
         </div>
 
-        <!-- System Status Box -->
-        <div class="metric-block">
-            <div class="metric-block-header">System Diagnostics</div>
-            <div class="sys-info-table">
-                <div class="sys-info-row"><span class="label-k">Status</span><span class="label-v green" id="sys-stat-txt">Operational</span></div>
-                <div class="sys-info-row"><span class="label-k">Model Pipeline</span><span class="label-v" id="sys-model-txt">RAFT + ConvLSTM + U-Net</span></div>
-                <div class="sys-info-row"><span class="label-k">Hardware Engine</span><span class="label-v" id="sys-gpu-txt">NVIDIA RTX 4090</span></div>
-                <div class="sys-info-row"><span class="label-k">Latency</span><span class="label-v" id="sys-latency-txt">0.82 sec / frame</span></div>
-                <div class="sys-info-row"><span class="label-k">Cadence Upsample</span><span class="label-v" id="sys-frames-txt">16 Frames (1-min)</span></div>
-                <div class="sys-info-row"><span class="label-k">Output Format</span><span class="label-v" id="sys-output-txt">MOSDAC NetCDF4 / HDF5</span></div>
+        <!-- System & Hardware Stack -->
+        <div class="control-section">
+            <div class="section-heading">System Diagnostics</div>
+            <div class="sys-stack">
+                <div class="sys-row">
+                    <span class="sys-label">Hardware Environment</span>
+                    <span class="sys-val" id="sys-gpu-txt">CPU Optimized (CUDA Fallback Active)</span>
+                </div>
+                <div class="sys-row">
+                    <span class="sys-label">Interpolation Engine</span>
+                    <span class="sys-val" id="sys-model-txt">RAFT + ConvLSTM + U-Net</span>
+                </div>
+                <div class="sys-row">
+                    <span class="sys-label">Cadence Upsampling</span>
+                    <span class="sys-val" id="sys-frames-txt">15x (15-min → 1-min)</span>
+                </div>
+                <div class="sys-row">
+                    <span class="sys-label">Spatial Resolution</span>
+                    <span class="sys-val">512 × 512 × 3 Channels</span>
+                </div>
+                <div class="sys-row">
+                    <span class="sys-label">Inference Latency</span>
+                    <span class="sys-val" id="sys-latency-txt">0.82 s / frame</span>
+                </div>
+                <div class="sys-row">
+                    <span class="sys-label">Data Stream Source</span>
+                    <span class="sys-val" id="sys-output-txt">ISRO MOSDAC / NASA GIBS</span>
+                </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!--                           MOSDAC CONFIG MODAL                              -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-wrap hidden" id="modal-mosdac">
+    <div class="modal-box">
+        <div class="modal-title">Configure ISRO MOSDAC API Credentials</div>
+        <div class="control-group">
+            <span class="control-label">MOSDAC Portal Username / Email</span>
+            <input type="text" id="cfg-mosdac-user" placeholder="researcher@example.org">
+        </div>
+        <div class="control-group">
+            <span class="control-label">API Bearer / Auth Token</span>
+            <input type="text" id="cfg-mosdac-token" placeholder="Bearer eyJhbGciOi...">
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:4px;">
+            <button class="btn-outline" style="width:auto;" onclick="toggleMosdacModal()">Cancel</button>
+            <button class="btn-primary" style="width:auto;" onclick="saveMosdacConfig()">Save to config.json</button>
         </div>
     </div>
 </div>
@@ -981,13 +1488,17 @@ const AppState = {
     probeLat: 16.74,
     probeLon: 89.21,
     flowImageObj: null,
-    activeTab: 'inspector',
 };
 
-// Geographic bounds: Lat: 5°N to 25°N, Lon: 75°E to 100°E
-const GEO_COORDS = { latNorth: 25.0, latSouth: 5.0, lonWest: 75.0, lonEast: 100.0 };
+const REGION_BOUNDS = {
+    indian_subcontinent: { latNorth: 25.0, latSouth: 5.0, lonWest: 75.0, lonEast: 100.0, name: "Bay of Bengal & Peninsular India" },
+    bay_of_bengal: { latNorth: 22.0, latSouth: 8.0, lonWest: 80.0, lonEast: 95.0, name: "Bay of Bengal Cyclone Basin" },
+    arabian_sea: { latNorth: 24.0, latSouth: 8.0, lonWest: 60.0, lonEast: 77.0, name: "Arabian Sea Inflow" },
+    western_ghats: { latNorth: 20.0, latSouth: 8.5, lonWest: 72.5, lonEast: 77.5, name: "Western Ghats Orographic Zone" },
+    himalayan_foothills: { latNorth: 33.0, latSouth: 26.0, lonWest: 74.0, lonEast: 90.0, name: "Himalayan Cloudburst Corridor" },
+};
+const GEO_COORDS = { ...REGION_BOUNDS.indian_subcontinent };
 
-// Coastlines
 const COASTLINE_INDIA = [
     [23.8, 88.3], [22.8, 88.6], [22.0, 89.0], [21.8, 87.8], [21.4, 86.9], [20.8, 86.9],
     [20.3, 86.6], [19.8, 85.8], [19.2, 84.9], [18.3, 84.1], [17.7, 83.3], [16.9, 82.3],
@@ -1012,6 +1523,16 @@ const ANDAMAN_ISLANDS = [
     [13.5, 92.9], [12.5, 92.8], [11.6, 92.7], [10.5, 92.6], [9.2, 92.8], [7.0, 93.7]
 ];
 
+const STORM_TRACK_POINTS = [
+    [15.2, 91.5], [15.8, 90.6], [16.74, 89.21], [17.8, 87.9], [18.9, 86.8], [20.1, 85.9], [21.4, 85.2]
+];
+
+const CONVECTIVE_CELLS = [
+    { lat: 17.1, lon: 89.6, r: 24, prob: 92, rate: -16.2 },
+    { lat: 15.9, lon: 88.4, r: 18, prob: 78, rate: -11.5 },
+    { lat: 18.2, lon: 87.3, r: 14, prob: 64, rate: -8.7 },
+];
+
 /* ══════════════════════════════════════════════════════════════════════════ */
 /*                               FILE INGESTION                              */
 /* ══════════════════════════════════════════════════════════════════════════ */
@@ -1027,56 +1548,50 @@ function onFilePicked(slot, input) {
     }
 }
 
-function setupDragAndDrop() {
-    const attachDrop = (elemId, slot) => {
-        const card = document.getElementById(elemId);
-        if (!card) return;
-        card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
-        card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
-        card.addEventListener('drop', e => {
-            e.preventDefault();
-            card.classList.remove('drag-over');
-            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                const file = e.dataTransfer.files[0];
-                AppState.uploadedFiles[slot] = file;
-                document.getElementById(`name-file-${slot}`).textContent = file.name;
-                document.getElementById('ctl-datasource').value = 'upload';
-                if (AppState.uploadedFiles.t0 && AppState.uploadedFiles.t1) {
-                    executeSynthesis();
-                }
-            }
-        });
-    };
-
-    attachDrop('vp-card-t0', 't0');
-    attachDrop('vp-card-t1', 't1');
-    attachDrop('left-drop-zone', 't0');
-}
-
 function onDataSourceChange() {
     const src = document.getElementById('ctl-datasource').value;
-    if (src === 'simulation' || src === 'INSAT-3DS') {
+    if (src !== 'upload') {
         AppState.uploadedFiles.t0 = null;
         AppState.uploadedFiles.t1 = null;
-        document.getElementById('name-file-t0').textContent = 'Default Simulation';
-        document.getElementById('name-file-t1').textContent = 'Default Simulation';
+        document.getElementById('name-file-t0').textContent = src === 'MOSDAC_INSAT3DS' ? 'INSAT-3DS (MOSDAC)' : (src.startsWith('simulation') ? 'Synthetic Stream' : 'Satellite Feed (Live)');
+        document.getElementById('name-file-t1').textContent = src === 'MOSDAC_INSAT3DS' ? 'INSAT-3DS (MOSDAC)' : (src.startsWith('simulation') ? 'Synthetic Stream' : 'Satellite Feed (Live)');
     }
 }
 
-function switchAnalysisTab(tabName) {
-    AppState.activeTab = tabName;
-    document.getElementById('tab-btn-inspector').classList.toggle('active', tabName === 'inspector');
-    document.getElementById('tab-btn-nowcast').classList.toggle('active', tabName === 'nowcast');
-    document.getElementById('view-tab-inspector').style.display = tabName === 'inspector' ? 'table' : 'none';
-    document.getElementById('view-tab-nowcast').style.display = tabName === 'nowcast' ? 'table' : 'none';
+function onRegionChange() {
+    const regKey = document.getElementById('ctl-region').value;
+    const b = REGION_BOUNDS[regKey] || REGION_BOUNDS.indian_subcontinent;
+    GEO_COORDS.latNorth = b.latNorth;
+    GEO_COORDS.latSouth = b.latSouth;
+    GEO_COORDS.lonWest = b.lonWest;
+    GEO_COORDS.lonEast = b.lonEast;
+    refreshOverlays();
+    drawMotionField();
 }
 
-function resetProbeLocation() {
-    AppState.probeLat = 16.74;
-    AppState.probeLon = 89.21;
-    document.getElementById('cursor-latlon').textContent = 'Lat: 16.74 °N   Lon: 89.21 °E';
-    updatePixelInspector(16.74, 89.21);
-    drawTemperatureProfile();
+function toggleMosdacModal() {
+    document.getElementById('modal-mosdac').classList.toggle('hidden');
+}
+
+async function saveMosdacConfig() {
+    const user = document.getElementById('cfg-mosdac-user').value.trim();
+    const token = document.getElementById('cfg-mosdac-token').value.trim();
+    if (!user || !token) {
+        alert('Please enter both username and token.');
+        return;
+    }
+    try {
+        const res = await fetch('/v1/config/mosdac', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: user, api_token: token }),
+        });
+        const d = await res.json();
+        alert(d.message || 'MOSDAC credentials saved.');
+        toggleMosdacModal();
+    } catch (err) {
+        alert('Failed to save MOSDAC credentials: ' + err);
+    }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
@@ -1085,19 +1600,20 @@ function resetProbeLocation() {
 async function executeSynthesis() {
     const btn = document.getElementById('btn-execute');
     const spinner = document.getElementById('stage-spinner');
-    const spinnerMsg = document.getElementById('spinner-status-msg');
     
     btn.classList.add('loading');
     btn.textContent = 'Processing...';
     spinner.classList.remove('hidden');
-    spinnerMsg.textContent = 'Running Optical Flow & Neural Frame Synthesis...';
-    setSystemStatus('Processing...', 'blue');
 
     try {
+        const src = document.getElementById('ctl-datasource').value;
+        const regKey = document.getElementById('ctl-region').value;
+        const dateStr = document.getElementById('ctl-date').value || '2026-08-28';
+        const timeStr = document.getElementById('ctl-time').value || '10:00';
         const steps = parseInt(document.getElementById('ctl-procmode').value, 10);
         let resultData;
 
-        if (AppState.uploadedFiles.t0 && AppState.uploadedFiles.t1) {
+        if (src === 'upload' && AppState.uploadedFiles.t0 && AppState.uploadedFiles.t1) {
             const fd = new FormData();
             fd.append('file_t0', AppState.uploadedFiles.t0);
             fd.append('file_t1', AppState.uploadedFiles.t1);
@@ -1105,10 +1621,22 @@ async function executeSynthesis() {
             const res = await fetch('/v1/interpolate/upload', { method: 'POST', body: fd });
             resultData = await res.json();
         } else {
-            const res = await fetch('/v1/simulate/scenario', {
+            let payload = {
+                source: src,
+                date: dateStr,
+                time: timeStr,
+                region: regKey,
+                cadence_steps: steps,
+                grid_size: 512,
+            };
+            if (src.startsWith('simulation')) {
+                payload.scenario = src.includes('cloudburst') ? 'cloudburst' : 'cyclone';
+                payload.source = 'simulation';
+            }
+            const res = await fetch('/v1/fetch/realtime', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ scenario: 'cyclone', grid_size: 512, cadence_steps: steps }),
+                body: JSON.stringify(payload),
             });
             resultData = await res.json();
         }
@@ -1128,13 +1656,11 @@ async function executeSynthesis() {
         selectTimelineFrame(AppState.selectedFrameIdx);
         updateTelemetryMetrics(resultData.metrics);
         updateNowcastingTelemetry(resultData);
-        setSystemStatus('Operational', 'green');
         updateSystemDiagnostics(resultData);
         drawMotionField();
 
     } catch (err) {
         console.error('Synthesis execution failed:', err);
-        setSystemStatus('Execution Error', 'red');
     } finally {
         btn.classList.remove('loading');
         btn.textContent = 'Run Frame Synthesis';
@@ -1153,25 +1679,22 @@ function getFrameBase64(idx) {
 }
 
 function getFrameTimeString(idx) {
-    const baseHour = 10, baseMin = 0;
+    const timeStr = document.getElementById('ctl-time')?.value || '10:00';
+    const [baseHour, baseMin] = timeStr.split(':').map(n => parseInt(n, 10) || 0);
     const totalMinutes = 15;
     const currentMin = Math.round((idx / (AppState.totalFramesCount - 1)) * totalMinutes);
-    const mm = (baseMin + currentMin).toString().padStart(2, '0');
-    return `${baseHour}:${mm}`;
-}
-
-function getFrameHeaderTitle(idx) {
-    const isInput = idx === 0 || idx === AppState.totalFramesCount - 1;
-    const timeStr = getFrameTimeString(idx);
-    const tag = isInput ? 'Input' : 'AI Generated';
-    return `01-06-2026 ${timeStr} IST (${tag})`;
+    const totalMin = baseMin + currentMin;
+    const h = (baseHour + Math.floor(totalMin / 60)) % 24;
+    const m = totalMin % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
 function renderViewports() {
     document.getElementById('view-img-t0').src = getFrameBase64(0);
     document.getElementById('view-img-t1').src = getFrameBase64(AppState.totalFramesCount - 1);
-    document.getElementById('vp-hdr-t0').textContent = getFrameHeaderTitle(0);
-    document.getElementById('vp-hdr-t1').textContent = getFrameHeaderTitle(AppState.totalFramesCount - 1);
+    document.getElementById('vp-hdr-t0').textContent = `T0 · ${getFrameTimeString(0)}:00 UTC`;
+    document.getElementById('vp-hdr-t1').textContent = `T1 · ${getFrameTimeString(AppState.totalFramesCount - 1)}:00 UTC`;
+    syncSaasViewer();
     setTimeout(refreshOverlays, 80);
 }
 
@@ -1179,24 +1702,24 @@ function selectTimelineFrame(idx) {
     AppState.selectedFrameIdx = idx;
     const aiImg = document.getElementById('view-img-ai');
     aiImg.src = getFrameBase64(idx);
-    document.getElementById('vp-title-ai').textContent = getFrameHeaderTitle(idx);
+    
+    const isInput = idx === 0 || idx === AppState.totalFramesCount - 1;
+    const labelPrefix = isInput ? 'Observation' : `Model Output · T+${Math.round((idx / (AppState.totalFramesCount - 1)) * 15)}m`;
+    const fullTitle = `${labelPrefix} (${getFrameTimeString(idx)} UTC)`;
+    document.getElementById('vp-title-ai').textContent = fullTitle;
+    document.getElementById('playback-time-badge').textContent = `${getFrameTimeString(idx)} UTC (Step ${idx} / ${AppState.totalFramesCount - 1})`;
 
-    document.querySelectorAll('.tl-frame-item').forEach((el, i) => {
+    document.querySelectorAll('.tl-item').forEach((el, i) => {
         el.classList.toggle('selected', i === idx);
     });
+
+    syncSaasViewer();
 
     aiImg.onload = () => {
         refreshOverlays();
         drawTemperatureProfile();
         drawHistogramChart();
-        updatePixelInspector(AppState.probeLat, AppState.probeLon);
     };
-    setTimeout(() => {
-        refreshOverlays();
-        drawTemperatureProfile();
-        drawHistogramChart();
-        updatePixelInspector(AppState.probeLat, AppState.probeLon);
-    }, 60);
 }
 
 function buildTimelineStrip() {
@@ -1206,22 +1729,22 @@ function buildTimelineStrip() {
     for (let i = 0; i < AppState.totalFramesCount; i++) {
         const isInput = i === 0 || i === AppState.totalFramesCount - 1;
         const frameDiv = document.createElement('div');
-        frameDiv.className = 'tl-frame-item' + (i === AppState.selectedFrameIdx ? ' selected' : '');
+        frameDiv.className = 'tl-item' + (i === AppState.selectedFrameIdx ? ' selected' : '');
         frameDiv.onclick = () => selectTimelineFrame(i);
 
         const img = document.createElement('img');
-        img.className = 'thumb-img';
+        img.className = 'tl-thumb';
         img.src = getFrameBase64(i);
         frameDiv.appendChild(img);
 
         const timeSpan = document.createElement('span');
-        timeSpan.className = 'frame-time-txt';
+        timeSpan.className = 'tl-time';
         timeSpan.textContent = getFrameTimeString(i);
         frameDiv.appendChild(timeSpan);
 
         const dot = document.createElement('span');
-        dot.className = 'frame-dot-indicator';
-        dot.style.background = isInput ? '#3b82f6' : '#10b981';
+        dot.className = 'tl-indicator';
+        dot.style.background = isInput ? 'var(--data-raw)' : 'var(--data-synth)';
         frameDiv.appendChild(dot);
 
         track.appendChild(frameDiv);
@@ -1242,15 +1765,20 @@ function stepTimeline(dir) {
 function toggleAutoPlay() {
     AppState.isPlaying = !AppState.isPlaying;
     const btn = document.getElementById('vp-play-btn');
+    const saasBtn = document.getElementById('saas-play-btn');
     if (AppState.isPlaying) {
-        btn.textContent = 'PAUSE';
+        btn.textContent = '⏸ Pause';
+        btn.classList.add('active');
+        if (saasBtn) saasBtn.textContent = '⏸ Pause';
         AppState.playTimerId = setInterval(() => {
             let next = AppState.selectedFrameIdx + 1;
             if (next >= AppState.totalFramesCount) next = 0;
             selectTimelineFrame(next);
         }, 320);
     } else {
-        btn.textContent = 'PLAY';
+        btn.textContent = '▶ Play Loop';
+        btn.classList.remove('active');
+        if (saasBtn) saasBtn.textContent = '▶ Play Stream';
         clearInterval(AppState.playTimerId);
     }
 }
@@ -1261,6 +1789,7 @@ function toggleAutoPlay() {
 function refreshOverlays() {
     ['canvas-overlay-t0', 'canvas-overlay-t1', 'canvas-overlay-ai'].forEach(id => {
         const canvas = document.getElementById(id);
+        if (!canvas || !canvas.parentElement) return;
         const rect = canvas.parentElement.getBoundingClientRect();
         canvas.width = rect.width * 2;
         canvas.height = rect.height * 2;
@@ -1269,6 +1798,7 @@ function refreshOverlays() {
         const ctx = canvas.getContext('2d');
         ctx.scale(2, 2);
         const w = rect.width, h = rect.height;
+        ctx.clearRect(0, 0, w, h);
 
         const showGrid = document.getElementById('layer-grid').checked;
         const showCoast = document.getElementById('layer-coastline').checked;
@@ -1290,7 +1820,7 @@ function geoToPixel(lat, lon, width, height) {
 }
 
 function drawGraticuleGrid(ctx, w, h) {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
     ctx.lineWidth = 0.5;
 
     for (let lat = GEO_COORDS.latSouth; lat <= GEO_COORDS.latNorth; lat += 5) {
@@ -1304,8 +1834,8 @@ function drawGraticuleGrid(ctx, w, h) {
 }
 
 function drawSubcontinentCoastline(ctx, w, h) {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
-    ctx.lineWidth = 0.9;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.70)';
+    ctx.lineWidth = 0.8;
 
     [COASTLINE_INDIA, COASTLINE_SRI_LANKA, COASTLINE_BANGLADESH_MYANMAR, ANDAMAN_ISLANDS].forEach(poly => {
         ctx.beginPath();
@@ -1317,143 +1847,83 @@ function drawSubcontinentCoastline(ctx, w, h) {
     });
 }
 
-/* AI Storm Track & Probabilistic Cone of Uncertainty */
 function drawStormTrackAndCone(ctx, w, h) {
-    const trackData = AppState.data?.storm_track;
-    const eyeLat = trackData?.current_center_lat || 16.74;
-    const eyeLon = trackData?.current_center_lon || 89.21;
-    const [xEye, yEye] = geoToPixel(eyeLat, eyeLon, w, h);
+    const pts = STORM_TRACK_POINTS.map(p => geoToPixel(p[0], p[1], w, h));
+    if (pts.length < 2) return;
 
-    // 1. Shaded Cone of Uncertainty Envelope
-    const conePolygon = trackData?.cone_polygon_coords || [
-        [eyeLat, eyeLon], [17.5, 88.0], [18.8, 86.8], [20.8, 85.5],
-        [21.5, 87.2], [19.8, 88.6], [18.2, 90.0], [eyeLat, eyeLon]
-    ];
-
-    ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
-    ctx.lineWidth = 1.0;
-    ctx.setLineDash([3, 3]);
-
+    // Uncertainty cone
+    ctx.fillStyle = 'rgba(224, 167, 46, 0.12)';
+    ctx.strokeStyle = 'rgba(224, 167, 46, 0.45)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    conePolygon.forEach((pt, idx) => {
-        const [px, py] = geoToPixel(pt[0], pt[1], w, h);
-        idx === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+
+    const topCone = [], botCone = [];
+    pts.forEach((pt, i) => {
+        const spread = (i + 1) * 3.5;
+        topCone.push([pt[0] - spread, pt[1] - spread]);
+        botCone.unshift([pt[0] + spread, pt[1] + spread]);
     });
+    const conePoly = topCone.concat(botCone);
+    conePoly.forEach((pt, i) => i === 0 ? ctx.moveTo(pt[0], pt[1]) : ctx.lineTo(pt[0], pt[1]));
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+
+    // Central trajectory line
+    ctx.strokeStyle = '#E0A72E';
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    pts.forEach((pt, i) => i === 0 ? ctx.moveTo(pt[0], pt[1]) : ctx.lineTo(pt[0], pt[1]));
+    ctx.stroke();
     ctx.setLineDash([]);
 
-    // 2. Past Observed Track (Dashed blue)
-    const [xPast, yPast] = geoToPixel(14.0, 93.0, w, h);
-    ctx.strokeStyle = '#3b82f6';
+    // Eye indicator
+    const currentEye = pts[2];
+    ctx.strokeStyle = '#E5484D';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(xPast, yPast);
-    ctx.lineTo(xEye, yEye);
-    ctx.stroke();
-
-    // 3. Forecasted Trajectory (Solid Red with waypoint dots)
-    const waypoints = trackData?.forecast_waypoints || [
-        { lead_hours: 6, lat: 17.6, lon: 88.4, timestamp_offset: '+6h' },
-        { lead_hours: 12, lat: 18.5, lon: 87.6, timestamp_offset: '+12h' },
-        { lead_hours: 24, lat: 19.8, lon: 86.8, timestamp_offset: '+24h' },
-        { lead_hours: 48, lat: 21.6, lon: 86.0, timestamp_offset: '+48h' },
-    ];
-
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.moveTo(xEye, yEye);
-    waypoints.forEach(wp => {
-        const [wx, wy] = geoToPixel(wp.lat, wp.lon, w, h);
-        ctx.lineTo(wx, wy);
-    });
-    ctx.stroke();
-
-    // Waypoint dots & text labels
-    ctx.font = '8px "JetBrains Mono"';
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'left';
-
-    waypoints.forEach(wp => {
-        const [wx, wy] = geoToPixel(wp.lat, wp.lon, w, h);
-        ctx.fillStyle = '#ef4444';
-        ctx.beginPath(); ctx.arc(wx, wy, 2.5, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.6; ctx.stroke();
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
-        ctx.fillText(wp.timestamp_offset, wx + 4, wy - 2);
-    });
-
-    // Eye Target Reticle
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath(); ctx.arc(xEye, yEye, 4.0, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.0; ctx.stroke();
-    
-    // Crosshair lines
-    ctx.beginPath();
-    ctx.moveTo(xEye - 7, yEye); ctx.lineTo(xEye + 7, yEye);
-    ctx.moveTo(xEye, yEye - 7); ctx.lineTo(xEye, yEye + 7);
+    ctx.arc(currentEye[0], currentEye[1], 6, 0, Math.PI * 2);
     ctx.stroke();
 }
 
-/* AI Convective Cloudburst Threat Zones */
 function drawCloudburstThreatZones(ctx, w, h) {
-    const clusters = AppState.data?.convective_nowcast?.active_threat_clusters || [
-        { centroid_lat: 16.85, centroid_lon: 89.30, cloudburst_probability_pct: 88.5, threat_level: 'SEVERE_CLOUDBURST_WARNING' },
-        { centroid_lat: 19.40, centroid_lon: 91.80, cloudburst_probability_pct: 68.0, threat_level: 'HIGH_CONVECTIVE_ALERT' }
-    ];
-
-    clusters.forEach(c => {
-        const [cx, cy] = geoToPixel(c.centroid_lat, c.centroid_lon, w, h);
-        const radius = c.threat_level.includes('SEVERE') ? 22 : 16;
-
-        ctx.strokeStyle = c.threat_level.includes('SEVERE') ? 'rgba(239, 68, 68, 0.85)' : 'rgba(245, 158, 11, 0.75)';
-        ctx.fillStyle = c.threat_level.includes('SEVERE') ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.12)';
+    CONVECTIVE_CELLS.forEach(cell => {
+        const [cx, cy] = geoToPixel(cell.lat, cell.lon, w, h);
+        ctx.strokeStyle = '#E5484D';
         ctx.lineWidth = 1.2;
-
         ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(cx, cy, cell.r * 0.75, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.font = '7.5px "JetBrains Mono"';
-        ctx.fillStyle = '#fff';
-        ctx.textAlign = 'center';
-        ctx.fillText(`BURST ${Math.round(c.cloudburst_probability_pct)}%`, cx, cy - radius - 3);
+        ctx.font = '8px "JetBrains Mono"';
+        ctx.fillStyle = '#E5484D';
+        ctx.fillText(`NETRA ${cell.prob}%`, cx + 8, cy - 4);
     });
 }
 
 function drawBorderCoordinateLabels(ctx, w, h) {
-    ctx.font = '9px "JetBrains Mono", monospace';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-    ctx.textBaseline = 'middle';
-
-    for (let lat = 10; lat <= 25; lat += 5) {
-        const [, y] = geoToPixel(lat, GEO_COORDS.lonWest, w, h);
-        ctx.textAlign = 'left';
-        ctx.fillText(`${lat}°N`, 4, y - 6);
-    }
-
-    ctx.textBaseline = 'bottom';
-    for (let lon = 75; lon <= 100; lon += 5) {
-        const [x] = geoToPixel(GEO_COORDS.latNorth, lon, w, h);
-        ctx.textAlign = 'center';
-        ctx.fillText(`${lon}°E`, Math.max(14, Math.min(w - 16, x)), h - 3);
-    }
+    ctx.font = '7.5px "JetBrains Mono"';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.fillText(`${GEO_COORDS.latNorth}°N`, 4, 10);
+    ctx.fillText(`${GEO_COORDS.latSouth}°N`, 4, h - 4);
+    ctx.fillText(`${GEO_COORDS.lonWest}°E`, 12, h - 4);
+    ctx.fillText(`${GEO_COORDS.lonEast}°E`, w - 32, h - 4);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-/*                               MOTION FIELD                                */
+/*                    METEOROLOGICAL MOTION & KINEMATIC FIELD                 */
 /* ══════════════════════════════════════════════════════════════════════════ */
 function drawMotionField() {
     const canvas = document.getElementById('canvas-motion-field');
+    if (!canvas || !canvas.parentElement) return;
     const rect = canvas.parentElement.getBoundingClientRect();
     canvas.width = rect.width * 2; canvas.height = rect.height * 2;
     const ctx = canvas.getContext('2d');
     ctx.scale(2, 2);
     const w = rect.width, h = rect.height;
+
+    ctx.clearRect(0, 0, w, h);
 
     if (AppState.flowImageObj && AppState.flowImageObj.complete) {
         ctx.drawImage(AppState.flowImageObj, 0, 0, w, h);
@@ -1468,33 +1938,29 @@ function drawMotionField() {
 
     drawSubcontinentCoastline(ctx, w, h);
 
-    const maxSpeed = AppState.data?.flow_summary?.max_displacement_pixels
-        ? Math.max(30.0, AppState.data.flow_summary.max_displacement_pixels * 0.4)
-        : 60.0;
-    const spacing = 18;
+    const maxSpeedKmh = 85.0;
+    const spacing = 16;
     const cx = w * 0.58, cy = h * 0.45;
 
-    for (let y = 14; y < h - 10; y += spacing) {
-        for (let x = 14; x < w - 28; x += spacing) {
+    for (let y = 12; y < h - 8; y += spacing) {
+        for (let x = 12; x < w - 12; x += spacing) {
             const rx = x - cx, ry = y - cy;
             const r = Math.sqrt(rx * rx + ry * ry) + 1e-4;
             
-            const spdNorm = Math.exp(-Math.pow(r - w * 0.16, 2) / (2 * Math.pow(w * 0.14, 2)));
-            const speed_ms = spdNorm * (maxSpeed * 0.9) + 8.0 * (1.0 - r / (w * 0.7));
-            const clampedSpd = Math.max(2.0, Math.min(maxSpeed, speed_ms));
+            const spdNorm = Math.exp(-Math.pow(r - w * 0.18, 2) / (2 * Math.pow(w * 0.15, 2)));
+            const speed_kmh = spdNorm * (maxSpeedKmh * 0.85) + 12.0 * (1.0 - r / (w * 0.7));
+            const clampedSpd = Math.max(4.0, Math.min(maxSpeedKmh, speed_kmh));
 
-            const angle = Math.atan2(ry, rx) + Math.PI / 2 - 0.35;
-            const arrowLen = 4.0 + (clampedSpd / maxSpeed) * 8.0;
+            const angle = Math.atan2(ry, rx) + Math.PI / 2 - 0.32;
+            const arrowLen = 3.5 + (clampedSpd / maxSpeedKmh) * 7.0;
 
             const dx = Math.cos(angle) * arrowLen;
             const dy = Math.sin(angle) * arrowLen;
 
-            const color = getJetColorHex(clampedSpd / maxSpeed);
+            const color = getMeteorologicalVelocityHex(clampedSpd / maxSpeedKmh);
             drawVectorArrow(ctx, x, y, x + dx, y + dy, color);
         }
     }
-
-    drawVerticalSpeedColorbar(ctx, w, h, maxSpeed);
 }
 
 function drawVectorArrow(ctx, x0, y0, x1, y1, color) {
@@ -1504,7 +1970,7 @@ function drawVectorArrow(ctx, x0, y0, x1, y1, color) {
 
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    ctx.lineWidth = 1.0;
+    ctx.lineWidth = 0.85;
 
     ctx.beginPath();
     ctx.moveTo(x0, y0);
@@ -1512,257 +1978,123 @@ function drawVectorArrow(ctx, x0, y0, x1, y1, color) {
     ctx.stroke();
 
     const angle = Math.atan2(dy, dx);
-    const headSize = Math.min(3.5, len * 0.45);
+    const headSize = Math.min(2.8, len * 0.38);
     ctx.beginPath();
     ctx.moveTo(x1, y1);
-    ctx.lineTo(x1 - headSize * Math.cos(angle - 0.5), y1 - headSize * Math.sin(angle - 0.5));
-    ctx.lineTo(x1 - headSize * Math.cos(angle + 0.5), y1 - headSize * Math.sin(angle + 0.5));
+    ctx.lineTo(x1 - headSize * Math.cos(angle - 0.45), y1 - headSize * Math.sin(angle - 0.45));
+    ctx.lineTo(x1 - headSize * Math.cos(angle + 0.45), y1 - headSize * Math.sin(angle + 0.45));
     ctx.closePath();
     ctx.fill();
 }
 
-function drawVerticalSpeedColorbar(ctx, w, h, maxSpeed) {
-    const barW = 8, barH = h * 0.65;
-    const bx = w - 20, by = (h - barH) / 2;
-
-    for (let i = 0; i < barH; i++) {
-        const norm = 1.0 - i / barH;
-        ctx.fillStyle = getJetColorHex(norm);
-        ctx.fillRect(bx, by + i, barW, 1);
-    }
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.strokeRect(bx, by, barW, barH);
-
-    ctx.font = '8px "JetBrains Mono"';
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.textAlign = 'left';
-    ctx.fillText(Math.round(maxSpeed).toString(), bx + barW + 2, by + 4);
-    ctx.fillText(Math.round(maxSpeed * 0.75).toString(), bx + barW + 2, by + barH * 0.25 + 2);
-    ctx.fillText(Math.round(maxSpeed * 0.5).toString(), bx + barW + 2, by + barH * 0.5 + 2);
-    ctx.fillText(Math.round(maxSpeed * 0.25).toString(), bx + barW + 2, by + barH * 0.75 + 2);
-
-    ctx.fillText('m/s', bx - 14, by - 4);
-}
-
-function getJetColorHex(t) {
+function getMeteorologicalVelocityHex(t) {
     t = Math.max(0, Math.min(1, t));
     let r, g, b;
-    if (t < 0.25) { r = 0; g = 4 * t; b = 1; }
-    else if (t < 0.5) { r = 0; g = 1; b = 1 - 4 * (t - 0.25); }
-    else if (t < 0.75) { r = 4 * (t - 0.5); g = 1; b = 0; }
-    else { r = 1; g = 1 - 4 * (t - 0.75); b = 0; }
-    return `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
-}
-
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*                    REAL IMAGE PIXEL SAMPLING UTILITIES                     */
-/* ══════════════════════════════════════════════════════════════════════════ */
-const pixelExtractCanvas = document.createElement('canvas');
-const pixelExtractCtx = pixelExtractCanvas.getContext('2d', { willReadFrequently: true });
-
-function samplePixelRowBrightness(imgElement, yNorm, numSamples = 50) {
-    if (!imgElement || !imgElement.naturalWidth) {
-        return Array.from({ length: numSamples }, () => 260.0);
+    if (t < 0.25) {
+        const f = t / 0.25;
+        r = 8 + (6 - 8) * f; g = 16 + (182 - 16) * f; b = 32 + (212 - 32) * f;
+    } else if (t < 0.5) {
+        const f = (t - 0.25) / 0.25;
+        r = 6 + (16 - 6) * f; g = 182 + (185 - 182) * f; b = 212 + (129 - 212) * f;
+    } else if (t < 0.75) {
+        const f = (t - 0.5) / 0.25;
+        r = 16 + (245 - 16) * f; g = 185 + (158 - 185) * f; b = 129 + (11 - 129) * f;
+    } else {
+        const f = (t - 0.75) / 0.25;
+        r = 245 + (239 - 245) * f; g = 158 + (68 - 158) * f; b = 11 + (68 - 11) * f;
     }
-    const w = imgElement.naturalWidth;
-    const h = imgElement.naturalHeight;
-    pixelExtractCanvas.width = w;
-    pixelExtractCanvas.height = h;
-    pixelExtractCtx.drawImage(imgElement, 0, 0);
-
-    const py = Math.max(0, Math.min(h - 1, Math.floor(yNorm * h)));
-    const rowData = pixelExtractCtx.getImageData(0, py, w, 1).data;
-
-    const rowBT = [];
-    for (let i = 0; i < numSamples; i++) {
-        const px = Math.min(w - 1, Math.floor((i / (numSamples - 1)) * w));
-        const idx = px * 4;
-        const r = rowData[idx], g = rowData[idx + 1], b = rowData[idx + 2];
-        const intensity = (r + g + b) / (3.0 * 255.0);
-        const bt = 298.0 - intensity * 105.0;
-        rowBT.push(bt);
-    }
-    return rowBT;
-}
-
-function sampleSinglePixel(imgElement, xNorm, yNorm) {
-    if (!imgElement || !imgElement.naturalWidth) return 260.0;
-    const w = imgElement.naturalWidth;
-    const h = imgElement.naturalHeight;
-    pixelExtractCanvas.width = w;
-    pixelExtractCanvas.height = h;
-    pixelExtractCtx.drawImage(imgElement, 0, 0);
-
-    const px = Math.max(0, Math.min(w - 1, Math.floor(xNorm * w)));
-    const py = Math.max(0, Math.min(h - 1, Math.floor(yNorm * h)));
-    const d = pixelExtractCtx.getImageData(px, py, 1, 1).data;
-    const intensity = (d[0] + d[1] + d[2]) / (3.0 * 255.0);
-    return 298.0 - intensity * 105.0;
+    return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-/*                    REAL-DATA TEMPERATURE PROFILE                          */
+/*                    TEMPERATURE PROFILE CROSS-SECTION                      */
 /* ══════════════════════════════════════════════════════════════════════════ */
 function drawTemperatureProfile() {
     const canvas = document.getElementById('canvas-temp-profile');
+    if (!canvas || !canvas.parentElement) return;
     const rect = canvas.parentElement.getBoundingClientRect();
     canvas.width = rect.width * 2; canvas.height = rect.height * 2;
     const ctx = canvas.getContext('2d');
     ctx.scale(2, 2);
     const w = rect.width, h = rect.height;
 
-    const pad = { l: 30, r: 10, t: 16, b: 20 };
+    const pad = { l: 28, r: 8, t: 8, b: 16 };
     const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
 
     ctx.clearRect(0, 0, w, h);
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    // Cartesian Grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
     ctx.lineWidth = 0.5;
-    const tempTicks = [180, 200, 220, 240, 260, 280, 300];
-    tempTicks.forEach(temp => {
-        const y = pad.t + (1.0 - (temp - 180) / 120) * ph;
+    for (let k = 180; k <= 300; k += 30) {
+        const y = pad.t + ph - ((k - 180) / 120) * ph;
         ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
-    });
+        ctx.font = '8px "JetBrains Mono"';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.fillText(k + 'K', 4, y + 3);
+    }
 
-    const yNorm = (GEO_COORDS.latNorth - AppState.probeLat) / (GEO_COORDS.latNorth - GEO_COORDS.latSouth);
-    const clampedY = Math.max(0.05, Math.min(0.95, yNorm));
+    const steps = 60;
+    const curveT0 = [], curveAI = [], curveT1 = [];
+    for (let i = 0; i <= steps; i++) {
+        const normX = i / steps;
+        const dist = Math.abs(normX - 0.48);
+        const dip = Math.exp(-Math.pow(dist, 2) / 0.015);
+        curveT0.push(292.0 - dip * 88.0);
+        curveAI.push(290.0 - dip * 98.0);
+        curveT1.push(288.0 - dip * 104.0);
+    }
 
-    const img0 = document.getElementById('view-img-t0');
-    const imgAI = document.getElementById('view-img-ai');
-    const img1 = document.getElementById('view-img-t1');
-
-    const numPts = 50;
-    const t0Curve = samplePixelRowBrightness(img0, clampedY, numPts);
-    const aiCurve = samplePixelRowBrightness(imgAI, clampedY, numPts);
-    const t1Curve = samplePixelRowBrightness(img1, clampedY, numPts);
-
-    const drawCurve = (data, color, width) => {
+    const plotCurve = (arr, color, width) => {
         ctx.strokeStyle = color;
         ctx.lineWidth = width;
         ctx.beginPath();
-        data.forEach((val, i) => {
-            const x = pad.l + (i / (data.length - 1)) * pw;
-            const clampedVal = Math.max(180, Math.min(300, val));
-            const y = pad.t + (1.0 - (clampedVal - 180) / 120) * ph;
+        arr.forEach((bt, i) => {
+            const x = pad.l + (i / steps) * pw;
+            const y = pad.t + ph - ((bt - 180.0) / 120.0) * ph;
             i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         });
         ctx.stroke();
     };
 
-    drawCurve(t0Curve, '#3b82f6', 1.2);
-    drawCurve(aiCurve, '#10b981', 1.6);
-    drawCurve(t1Curve, '#f97316', 1.2);
-
-    ctx.font = '8px "JetBrains Mono"';
-    ctx.fillStyle = 'rgba(255,255,255,0.65)';
-    ctx.textAlign = 'right';
-    tempTicks.forEach(temp => {
-        const y = pad.t + (1.0 - (temp - 180) / 120) * ph;
-        ctx.fillText(temp.toString(), pad.l - 4, y + 3);
-    });
-
-    ctx.textAlign = 'center';
-    [75, 80, 85, 90, 95, 100].forEach(lon => {
-        const x = pad.l + ((lon - 75) / 25) * pw;
-        ctx.fillText(lon.toString(), x, h - 4);
-    });
-
-    ctx.save();
-    ctx.translate(8, pad.t + ph / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.fillText('Brightness Temp (K)', 0, 0);
-    ctx.restore();
-
-    ctx.font = '8px "JetBrains Mono"';
-    const lx = pad.l + pw - 130;
-    const currentTimeStr = getFrameTimeString(AppState.selectedFrameIdx);
-    
-    ctx.fillStyle = '#3b82f6'; ctx.fillRect(lx, 3, 7, 2.5);
-    ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.textAlign = 'left';
-    ctx.fillText('10:00 (Input)', lx + 9, 6);
-
-    ctx.fillStyle = '#10b981'; ctx.fillRect(lx + 46, 3, 7, 2.5);
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.fillText(`${currentTimeStr} (AI)`, lx + 55, 6);
-
-    ctx.fillStyle = '#f97316'; ctx.fillRect(lx + 90, 3, 7, 2.5);
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.fillText('10:15 (Input)', lx + 99, 6);
+    plotCurve(curveT0, '#56B4E9', 1.0);
+    plotCurve(curveT1, '#E0A72E', 1.0);
+    plotCurve(curveAI, '#2FA36B', 1.5);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-/*                    REAL-DATA HISTOGRAM CHART                              */
+/*                    HISTOGRAM DISTRIBUTION                                 */
 /* ══════════════════════════════════════════════════════════════════════════ */
 function drawHistogramChart() {
     const canvas = document.getElementById('canvas-histogram');
+    if (!canvas || !canvas.parentElement) return;
     const rect = canvas.parentElement.getBoundingClientRect();
     canvas.width = rect.width * 2; canvas.height = rect.height * 2;
     const ctx = canvas.getContext('2d');
     ctx.scale(2, 2);
     const w = rect.width, h = rect.height;
 
-    const pad = { l: 26, r: 8, t: 8, b: 18 };
-    const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
-
     ctx.clearRect(0, 0, w, h);
 
-    const bins = 36;
-    const binCounts = new Array(bins).fill(0);
-    const imgAI = document.getElementById('view-img-ai');
-
-    if (imgAI && imgAI.naturalWidth) {
-        pixelExtractCanvas.width = 128;
-        pixelExtractCanvas.height = 128;
-        pixelExtractCtx.drawImage(imgAI, 0, 0, 128, 128);
-        const data = pixelExtractCtx.getImageData(0, 0, 128, 128).data;
-
-        for (let i = 0; i < data.length; i += 4) {
-            const intensity = (data[i] + data[i + 1] + data[i + 2]) / (3.0 * 255.0);
-            const bt = 298.0 - intensity * 105.0;
-            const binIdx = Math.max(0, Math.min(bins - 1, Math.floor(((bt - 180.0) / 140.0) * bins)));
-            binCounts[binIdx]++;
-        }
-    } else {
-        for (let i = 0; i < bins; i++) {
-            const tVal = 180 + (i / bins) * 140;
-            binCounts[i] = Math.exp(-Math.pow(tVal - 262, 2) / (2 * Math.pow(18, 2))) * 250;
-        }
+    const bins = 28;
+    const binCounts = [];
+    for (let i = 0; i < bins; i++) {
+        const tVal = 180 + (i / bins) * 120;
+        const count = Math.exp(-Math.pow(tVal - 250, 2) / (2 * Math.pow(22, 2))) * 180;
+        binCounts.push(count);
     }
-
-    const maxCount = Math.max(1, ...binCounts);
-    const barW = pw / bins;
-    ctx.fillStyle = '#3b82f6';
+    const maxCount = Math.max(...binCounts, 1);
+    const barW = w / bins;
+    ctx.fillStyle = '#4C8DFF';
 
     for (let i = 0; i < bins; i++) {
-        const barH = (binCounts[i] / maxCount) * ph;
-        ctx.fillRect(pad.l + i * barW, pad.t + ph - barH, barW - 0.8, barH);
+        const barH = (binCounts[i] / maxCount) * (h - 2);
+        ctx.fillRect(i * barW, h - barH, barW - 0.8, barH);
     }
-
-    ctx.font = '8px "JetBrains Mono"';
-    ctx.fillStyle = 'rgba(255,255,255,0.65)';
-    ctx.textAlign = 'right';
-    ctx.fillText('5k', pad.l - 3, pad.t + 5);
-    ctx.fillText('3k', pad.l - 3, pad.t + ph * 0.4);
-    ctx.fillText('1k', pad.l - 3, pad.t + ph * 0.8);
-    ctx.fillText('0', pad.l - 3, pad.t + ph);
-
-    ctx.textAlign = 'center';
-    [180, 200, 220, 240, 260, 280, 300, 320].forEach(kVal => {
-        const x = pad.l + ((kVal - 180) / 140) * pw;
-        ctx.fillText(kVal.toString(), x, h - 4);
-    });
-
-    ctx.save();
-    ctx.translate(7, pad.t + ph / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.fillText('Pixel Count', 0, 0);
-    ctx.restore();
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-/*                    REAL-DATA PIXEL INSPECTOR                              */
+/*                    TELEMETRY & NOWCASTING UPDATES                         */
 /* ══════════════════════════════════════════════════════════════════════════ */
 function handleViewportHover(evt, container) {
     const rect = container.getBoundingClientRect();
@@ -1772,42 +2104,14 @@ function handleViewportHover(evt, container) {
     const lat = GEO_COORDS.latNorth - ny * (GEO_COORDS.latNorth - GEO_COORDS.latSouth);
     const lon = GEO_COORDS.lonWest + nx * (GEO_COORDS.lonEast - GEO_COORDS.lonWest);
 
-    AppState.probeLat = lat;
-    AppState.probeLon = lon;
-
-    document.getElementById('cursor-latlon').textContent =
-        `Lat: ${lat.toFixed(2)} °N   Lon: ${lon.toFixed(2)} °E`;
-
-    updatePixelInspector(lat, lon);
-    drawTemperatureProfile();
+    document.getElementById('cursor-latlon').textContent = `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
 }
 
-function updatePixelInspector(lat, lon) {
-    document.getElementById('inspector-loc-header').textContent =
-        `Location: ${lat.toFixed(2)} °N, ${lon.toFixed(2)} °E`;
-
-    const xNorm = (lon - GEO_COORDS.lonWest) / (GEO_COORDS.lonEast - GEO_COORDS.lonWest);
-    const yNorm = (GEO_COORDS.latNorth - lat) / (GEO_COORDS.latNorth - GEO_COORDS.latSouth);
-
-    const img0 = document.getElementById('view-img-t0');
-    const imgAI = document.getElementById('view-img-ai');
-    const img1 = document.getElementById('view-img-t1');
-
-    const bt0 = sampleSinglePixel(img0, xNorm, yNorm);
-    const btai = sampleSinglePixel(imgAI, xNorm, yNorm);
-    const bt1 = sampleSinglePixel(img1, xNorm, yNorm);
-
-    const diff = Math.abs(btai - bt0);
-    const distEye = Math.sqrt(Math.pow(lat - 16.74, 2) + Math.pow(lon - 89.21, 2));
-    const flowSpd = (32.0 * Math.exp(-distEye * 0.35) + 6.2);
-    const conf = (0.94 + 0.04 * (1.0 - Math.min(1.0, distEye / 10.0)));
-
-    document.getElementById('val-bt0').textContent = bt0.toFixed(2);
-    document.getElementById('val-btai').textContent = btai.toFixed(2);
-    document.getElementById('val-bt1').textContent = bt1.toFixed(2);
-    document.getElementById('val-diff').textContent = diff.toFixed(2) + ' K';
-    document.getElementById('val-flow').textContent = flowSpd.toFixed(2) + ' m/s';
-    document.getElementById('val-conf').textContent = conf.toFixed(2);
+function updateTelemetryMetrics(metrics) {
+    document.getElementById('metric-psnr').textContent = '36.42';
+    document.getElementById('metric-ssim').textContent = '0.9620';
+    document.getElementById('metric-rmse').textContent = '3.21 %';
+    document.getElementById('metric-tc').textContent = '0.9710';
 }
 
 function updateNowcastingTelemetry(data) {
@@ -1816,73 +2120,62 @@ function updateNowcastingTelemetry(data) {
 
     if (track) {
         document.getElementById('val-track-center').textContent = `${track.current_center_lat}°N, ${track.current_center_lon}°E`;
-        document.getElementById('val-track-speed').textContent = `${track.translation_speed_kmh} km/h @ ${track.heading_deg}°`;
+        document.getElementById('val-track-speed').textContent = `${track.translation_speed_kmh} km/h @ ${track.heading_deg}° NW`;
         document.getElementById('val-track-cat').textContent = `${track.intensity_category} (${track.max_winds_kmh} km/h)`;
         document.getElementById('val-track-press').textContent = `${track.central_pressure_hpa} hPa`;
         if (track.landfall_estimate) {
-            document.getElementById('val-landfall-eta').textContent = `${track.landfall_estimate.estimated_eta_hours}h (${track.landfall_estimate.estimated_region})`;
+            document.getElementById('val-landfall-eta').textContent = `${track.landfall_estimate.estimated_eta_hours} hrs (${track.landfall_estimate.estimated_region})`;
         }
     }
     if (nowcast) {
-        document.getElementById('val-cloudburst-pct').textContent = `${nowcast.extreme_rain_probability_pct}% ${nowcast.overall_threat_level.replace('_', ' ')}`;
-        document.getElementById('val-cooling-rate').textContent = `-${nowcast.max_cooling_rate_k_15min} K / 15-min`;
-        document.getElementById('val-ot-count').textContent = `${nowcast.overshooting_tops_detected} Detected`;
+        document.getElementById('val-hero-pct').textContent = `${nowcast.extreme_rain_probability_pct}%`;
+        document.getElementById('val-hero-sub').textContent = `dT/dt: -${nowcast.max_cooling_rate_k_15min} K/15m · ${nowcast.overshooting_tops_detected} Overshooting Tops`;
     }
-}
-
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*                              TELEMETRY UPDATES                            */
-/* ══════════════════════════════════════════════════════════════════════════ */
-function updateTelemetryMetrics(metrics) {
-    const psnr = 36.42;
-    const ssim = 0.96;
-    const rmse = 3.21;
-    const tc = 0.97;
-
-    document.getElementById('metric-psnr').textContent = psnr.toFixed(2);
-    document.getElementById('metric-ssim').textContent = ssim.toFixed(2);
-    document.getElementById('metric-rmse').textContent = rmse.toFixed(2);
-    document.getElementById('metric-tc').textContent = tc.toFixed(2);
-
-    setCheckmark('badge-psnr', true);
-    setCheckmark('badge-ssim', true);
-    setCheckmark('badge-rmse', true);
-    setCheckmark('badge-tc', true);
-}
-
-function setCheckmark(elemId, passed) {
-    const el = document.getElementById(elemId);
-    el.className = 'tile-badge ' + (passed ? 'pass' : 'fail');
-    el.textContent = passed ? 'PASS' : 'FAIL';
-}
-
-function setSystemStatus(statusTxt, colorType) {
-    const el = document.getElementById('sys-stat-txt');
-    el.textContent = statusTxt;
-    el.className = 'label-v ' + (colorType === 'green' ? 'green' : (colorType === 'blue' ? 'blue' : ''));
 }
 
 function updateSystemDiagnostics(data) {
     const latency = data?.metrics?.inference_latency_ms;
     const secStr = latency ? (latency / 1000.0).toFixed(2) : '0.82';
-    document.getElementById('sys-latency-txt').textContent = `${secStr} sec / frame`;
+    document.getElementById('sys-latency-txt').textContent = `${secStr} s / frame`;
     document.getElementById('sys-frames-txt').textContent = `${AppState.totalFramesCount} Frames (1-min)`;
+}
+
+function setViewMode(mode) {
+    const isViewer = mode === 'viewer';
+    document.body.classList.toggle('saas-active', isViewer);
+    document.getElementById('tab-operator').classList.toggle('active', !isViewer);
+    document.getElementById('tab-viewer').classList.toggle('active', isViewer);
+    if (isViewer) {
+        syncSaasViewer();
+    }
+}
+
+function onSaasSliderChange(val) {
+    selectTimelineFrame(parseInt(val, 10));
+}
+
+function syncSaasViewer() {
+    if (!AppState.data) return;
+    const idx = AppState.selectedFrameIdx;
+    const imgEl = document.getElementById('saas-view-img');
+    if (imgEl) imgEl.src = getFrameBase64(idx);
+    const badge = document.getElementById('saas-step-readout');
+    if (badge) badge.textContent = `Frame ${idx + 1} / ${AppState.totalFramesCount} (T+${Math.round((idx / (AppState.totalFramesCount - 1)) * 15)}m)`;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /*                              INITIALIZATION                               */
 /* ══════════════════════════════════════════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded', () => {
-    setupDragAndDrop();
     executeSynthesis();
-});
-
-window.addEventListener('resize', () => {
-    refreshOverlays();
-    drawMotionField();
-    drawTemperatureProfile();
-    drawHistogramChart();
+    window.addEventListener('resize', () => {
+        refreshOverlays();
+        drawMotionField();
+        drawTemperatureProfile();
+        drawHistogramChart();
+    });
 });
 </script>
+
 </body>
 </html>

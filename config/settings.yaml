@@ -9,6 +9,35 @@ system:
   num_workers: 4
   seed: 42
 
+data_sources:
+  mosdac:
+    enabled: true
+    portal_url: "https://mosdac.gov.in"
+    dataset_id: "3SIMG_L1B_STD"
+    cache_dir: "data/raw_netcdf/mosdac"
+    default_region:
+      lat_north: 35.0
+      lat_south: 5.0
+      lon_west: 65.0
+      lon_east: 100.0
+  real_satellite:
+    enabled: true
+    source: "NASA_GIBS_OPEN_WMTS"
+    cache_dir: "data/raw_netcdf/real_satellite"
+    default_region: "indian_subcontinent"
+
+nowcasting:
+  cloudburst:
+    overshooting_top_bt_k: 210.0
+    cooling_rate_threshold_k_per_15min: -2.0
+    severe_bt_threshold_k: 220.0
+    sigmoid_beta: [-2.5, 0.8, 0.12, 1.5]
+    reference_rainfall_threshold_mm_hr: 100.0
+  dvorak:
+    pressure_wind_a: 2.3
+    pressure_wind_b: 0.76
+    reference_pressure_hpa: 1010.0
+
 channels:
   # INSAT-3DS Multi-Spectral Imager Channels
   supported:

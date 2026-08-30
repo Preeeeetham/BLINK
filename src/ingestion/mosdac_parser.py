@@ -240,15 +240,19 @@ class SyntheticMOSDACSimulator:
         # Outflow cirrus canopy (wispy radial streaks)
         cirrus = np.sin(12.0 * theta + 4.0 * r - rot) * np.exp(-2.0 * (r - 0.5)**2) * 0.22
 
+        # Background synoptic cloud cover and frontal bands across Indian Ocean
+        synoptic_flow = np.sin(x_norm * 2.5 + y_norm * 1.8 + t_normalized * 0.8) * 0.20
+        synoptic_cirrus = np.cos(x_norm * 4.2 - y_norm * 3.1 + t_normalized * 0.6) * 0.15
+        cumulus_field = np.maximum(0.0, np.sin(x_norm * 9.0 + y_norm * 8.0) * np.cos(x_norm * 12.0 - y_norm * 10.0)) * 0.25
+
         # Combined cloud density [0.0, 1.0]
-        cloud_field = np.clip(cdo_core + spiral_clouds * 0.75 + cirrus, 0.0, 1.0)
-        cloud_field = np.power(cloud_field, 0.85)  # Enhance contrast
+        cloud_field = np.clip(cdo_core * 1.2 + spiral_clouds * 0.85 + cirrus + synoptic_flow + synoptic_cirrus + cumulus_field, 0.0, 1.0)
+        cloud_field = np.power(cloud_field, 0.75)  # High contrast cloud edges
 
         # Background ocean / land thermal structure
-        # Land has higher diurnal temperature variance, ocean is relatively uniform ~298K
-        tir1 = (298.0 - cloud_field * 105.0).astype(np.float32)  # Cold cloud tops ~193K, ocean ~298K
-        vis = (cloud_field * 92.0 + 6.0).astype(np.float32)       # High reflectance for dense clouds
-        wv = (258.0 - cloud_field * 45.0).astype(np.float32)      # Upper troposphere moisture
+        tir1 = (302.0 - cloud_field * 115.0).astype(np.float32)  # Cold cloud tops ~187K, warm ocean ~302K
+        vis = (cloud_field * 95.0 + 5.0).astype(np.float32)        # High reflectance for dense clouds
+        wv = (265.0 - cloud_field * 58.0).astype(np.float32)       # Deep troposphere moisture
 
         return {"IMG_VIS": vis, "IMG_WV": wv, "IMG_TIR1": tir1}
 
@@ -258,29 +262,41 @@ class SyntheticMOSDACSimulator:
         t_normalized: float = 0.0,
     ) -> Dict[str, np.ndarray]:
         """
-        Simulates explosive convective cloudburst with rapid anvil expansion and overshooting tops.
+        Simulates explosive convective cloudburst with multi-cell updraft towers,
+        rapid cirrus anvil expansion, overshooting tops (<205 K), and feeder inflow bands.
         """
         h, w = grid_size
-        y, x = np.mgrid[0:h, 0:w]
+        y, x = np.mgrid[0:h, 0:w].astype(np.float32)
 
-        # Expanding storm center
-        cx, cy = 0.45 + 0.08 * t_normalized, 0.52 - 0.04 * t_normalized
+        # Primary expanding storm cluster (drifting northeast)
+        cx, cy = 0.52 + 0.06 * t_normalized, 0.48 - 0.03 * t_normalized
         x_norm = (x / w - cx) * 2.0
         y_norm = (y / h - cy) * 2.0
+        r = np.sqrt(x_norm**2 + y_norm**2) + 1e-6
+        theta = np.arctan2(y_norm, x_norm)
 
-        r = np.sqrt(x_norm**2 + y_norm**2)
+        # Rapid radial anvil expansion (growing 2.5x over the 15-min interval)
+        current_radius = 0.18 + 0.32 * t_normalized
+        core_growth = np.exp(-((r / current_radius) ** 2.2))
 
-        # Rapid radial expansion
-        current_radius = 0.15 + 0.25 * t_normalized
-        core = np.exp(-((r / current_radius) ** 2))
+        # Overshooting convective tops (intense cold peaks inside the core)
+        ot1 = np.exp(-((x_norm + 0.04)**2 + (y_norm - 0.03)**2) / 0.008) * 1.3
+        ot2 = np.exp(-((x_norm - 0.08)**2 + (y_norm + 0.05)**2) / 0.012) * 1.1
+        ot_peaks = ot1 + ot2
 
-        # Turbulence and anvil ripples
-        ripple = 0.12 * np.sin(12.0 * r - 4.0 * t_normalized) * core
-        density = np.clip(core + ripple, 0.0, 1.0)
+        # Anvil gravity wave ripples and cirrus outflow plumes
+        ripples = 0.18 * np.sin(16.0 * r - 6.0 * t_normalized + 3.0 * theta) * core_growth
+        feeder_bands = np.maximum(0.0, np.sin(x_norm * 6.0 + y_norm * 4.0 - t_normalized * 1.5)) * 0.35 * np.exp(-r * 1.5)
 
-        vis = (density * 90.0 + 8.0).astype(np.float32)
-        tir1 = (300.0 - density * 105.0).astype(np.float32)  # Down to 195 K
-        wv = (260.0 - density * 48.0).astype(np.float32)
+        # Surrounding ambient cumulus & cirrus field
+        ambient_clouds = np.maximum(0.0, np.sin(x / w * 14.0 + y / h * 12.0) * np.cos(x / w * 18.0)) * 0.20
+
+        density = np.clip(core_growth * 0.95 + ot_peaks * 0.35 + ripples + feeder_bands + ambient_clouds, 0.0, 1.0)
+        density = np.power(density, 0.8)
+
+        vis = (density * 96.0 + 4.0).astype(np.float32)
+        tir1 = (305.0 - density * 120.0).astype(np.float32)  # Overshooting tops reach down to 185 K
+        wv = (268.0 - density * 62.0).astype(np.float32)
 
         return {"IMG_VIS": vis, "IMG_WV": wv, "IMG_TIR1": tir1}
 

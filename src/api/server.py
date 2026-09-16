@@ -656,6 +656,92 @@ def configure_mosdac(req: MOSDACConfigRequest):
     }
 
 
+def _find_available_insat_files() -> Dict[str, Any]:
+    """
+    Auto-discovers available INSAT datasets across all operational directories:
+    1. config.local.json / config.json 'download_path'
+    2. 'MOSDAC'
+    3. 'data/raw_netcdf/mosdac'
+    4. 'data/raw_netcdf'
+    5. 'data/exported_images'
+    """
+    search_dirs: List[Path] = []
+
+    # Check config files
+    for cfg_name in ["config.local.json", "config.json"]:
+        cfg_path = Path(cfg_name)
+        if cfg_path.exists():
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    dl_path = cfg.get("download_settings", {}).get("download_path")
+                    if dl_path:
+                        p = Path(dl_path)
+                        if p not in search_dirs:
+                            search_dirs.append(p)
+            except Exception:
+                pass
+
+    # Standard directories
+    search_dirs.extend([
+        Path("MOSDAC"),
+        Path("data/raw_netcdf/mosdac"),
+        Path("data/raw_netcdf"),
+    ])
+
+    # Env override
+    env_dl = os.environ.get("MOSDAC_DOWNLOAD_PATH")
+    if env_dl and Path(env_dl) not in search_dirs:
+        search_dirs.insert(0, Path(env_dl))
+
+    # Scan for HDF5 files
+    h5_files: List[Path] = []
+    seen_stems = set()
+    valid_dirs = []
+
+    for sdir in search_dirs:
+        if sdir.exists() and sdir.is_dir():
+            valid_dirs.append(str(sdir.resolve()))
+            for pat in ["*.h5", "*.hdf5", "*.nc", "*.nc4"]:
+                for p in sorted(list(sdir.glob(pat))):
+                    if p.stem not in seen_stems and not p.name.endswith(".part"):
+                        seen_stems.add(p.stem)
+                        h5_files.append(p)
+
+    # Scan for exported images in data/exported_images
+    exp_dir = Path("data/exported_images")
+    exported_images: List[Path] = []
+    if exp_dir.exists() and exp_dir.is_dir():
+        exported_images = sorted(list(exp_dir.glob("*.jpg")) + list(exp_dir.glob("*.png")))
+
+    # Find matching exported composite pairs (e.g. *RGB_COMPOSITE.jpg or *IMG_TIR1_colored.jpg)
+    rgb_composites = sorted(list(exp_dir.glob("*RGB_COMPOSITE.jpg"))) if exp_dir.exists() else []
+
+    return {
+        "h5_files": h5_files,
+        "exported_images": exported_images,
+        "rgb_composites": rgb_composites,
+        "search_dirs": valid_dirs,
+        "has_h5": len(h5_files) >= 2,
+        "has_exported": len(rgb_composites) >= 2,
+    }
+
+
+@app.get("/v1/datasets/scan")
+def scan_local_datasets():
+    """Returns all locally discovered INSAT HDF5 files and exported images."""
+    discovery = _find_available_insat_files()
+    return {
+        "status": "success",
+        "h5_files_count": len(discovery["h5_files"]),
+        "h5_files": [str(p) for p in discovery["h5_files"]],
+        "exported_images_count": len(discovery["exported_images"]),
+        "rgb_composite_pairs_count": len(discovery["rgb_composites"]),
+        "searched_directories": discovery["search_dirs"],
+        "ready_for_offline_insat": discovery["has_h5"] or discovery["has_exported"],
+    }
+
+
 @app.post("/v1/fetch/query")
 def query_available_scans(req: RealDataQueryRequest):
     """Lists available satellite scans and timestamps for a date and region."""
@@ -686,8 +772,9 @@ def interpolate_realtime_feed(req: RealDataInterpolateRequest):
     target_size = (req.grid_size, req.grid_size)
     geo_bounds = RealSatelliteFetcher.REGIONS.get(req.region, RealSatelliteFetcher.REGIONS["indian_subcontinent"])
 
-    mosdac_dir = Path("MOSDAC")
-    local_h5 = sorted(list(mosdac_dir.glob("*.h5")) + list(mosdac_dir.glob("*.hdf5")))
+    discovery = _find_available_insat_files()
+    local_h5 = discovery["h5_files"]
+    rgb_composites = discovery["rgb_composites"]
 
     d_mid = None
     if req.source in {"MOSDAC_INSAT3DS", "real", "REAL", "mosdac", "INSAT3DS"} and len(local_h5) >= 2:
@@ -704,12 +791,36 @@ def interpolate_realtime_feed(req: RealDataInterpolateRequest):
             d0, geo_bounds = interpolator.parser.read_hdf5_sector(file_0, region=req.region, target_size=target_size)
             d1, _ = interpolator.parser.read_hdf5_sector(file_1, region=req.region, target_size=target_size)
         meta = {
-            "source": "INSAT-3DS Level-1B (Operational Multi-Spectral Imager)",
+            "source": f"INSAT-3DS Level-1B (Local HDF5 from {file_0.parent.name}/)",
             "observation_date": "2026-08-30",
             "t0_time_utc": file_0.stem,
             "t1_time_utc": file_1.stem,
             "region_name": req.region,
             "geo_bounds": geo_bounds,
+            "local_path": str(file_0.resolve()),
+        }
+    elif req.source in {"MOSDAC_INSAT3DS", "real", "REAL", "mosdac", "INSAT3DS"} and len(rgb_composites) >= 2:
+        # Load from exported_images RGB composites
+        file_0 = rgb_composites[0]
+        file_1 = rgb_composites[1]
+        im0 = Image.open(file_0).convert("RGB").resize(target_size)
+        im1 = Image.open(file_1).convert("RGB").resize(target_size)
+        arr0 = np.array(im0, dtype=np.float32) / 255.0
+        arr1 = np.array(im1, dtype=np.float32) / 255.0
+        d0 = {"IMG_VIS": arr0[:, :, 0], "IMG_WV": arr0[:, :, 1], "IMG_TIR1": arr0[:, :, 2]}
+        d1 = {"IMG_VIS": arr1[:, :, 0], "IMG_WV": arr1[:, :, 1], "IMG_TIR1": arr1[:, :, 2]}
+        if len(rgb_composites) >= 3:
+            im_mid = Image.open(rgb_composites[2]).convert("RGB").resize(target_size)
+            arr_mid = np.array(im_mid, dtype=np.float32) / 255.0
+            d_mid = {"IMG_VIS": arr_mid[:, :, 0], "IMG_WV": arr_mid[:, :, 1], "IMG_TIR1": arr_mid[:, :, 2]}
+        meta = {
+            "source": f"INSAT-3DS Exported Composites (from {file_0.parent.name}/)",
+            "observation_date": "2026-08-30",
+            "t0_time_utc": file_0.stem,
+            "t1_time_utc": file_1.stem,
+            "region_name": req.region,
+            "geo_bounds": geo_bounds,
+            "local_path": str(file_0.resolve()),
         }
     elif req.source in {"simulation", "SIMULATION"}:
         is_cloudburst = bool(req.scenario and req.scenario.lower() == "cloudburst") or (req.region == "himalayan_foothills")

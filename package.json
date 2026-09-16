@@ -1,0 +1,69 @@
+{
+  "name": "blink-satellite",
+  "version": "1.0.0",
+  "description": "Operational Satellite Kinematics, Optical Flow Interpolation & INSAT Tropical Cyclone Landfall Prediction Engine",
+  "main": "./src-js/index.js",
+  "module": "./src-js/index.mjs",
+  "types": "./types/index.d.ts",
+  "bin": {
+    "blink": "./bin/blink.js",
+    "blink-satellite": "./bin/blink.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./src-js/index.mjs",
+      "require": "./src-js/index.js"
+    },
+    "./meteorology": {
+      "types": "./types/index.d.ts",
+      "import": "./src-js/meteorology/landfall.mjs",
+      "require": "./src-js/meteorology/landfall.js"
+    },
+    "./client": {
+      "types": "./types/index.d.ts",
+      "import": "./src-js/client/client.mjs",
+      "require": "./src-js/client/client.js"
+    }
+  },
+  "files": [
+    "src-js",
+    "bin",
+    "types",
+    "ui/static",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test tests-js/*.test.mjs",
+    "start": "node bin/blink.js start",
+    "stop": "node bin/blink.js stop",
+    "status": "node bin/blink.js status",
+    "nowcast": "node bin/blink.js nowcast",
+    "serve": "node bin/serve.js"
+  },
+  "keywords": [
+    "satellite",
+    "meteorology",
+    "insat",
+    "nowcasting",
+    "cyclone",
+    "landfall",
+    "optical-flow",
+    "psnr",
+    "ssim",
+    "netra",
+    "isro",
+    "imd"
+  ],
+  "author": "Preetham Levaku",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Preeeeetham/BLINK.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

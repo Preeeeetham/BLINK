@@ -1,0 +1,56 @@
+# Large datasets & raw archives
+data/
+MOSDAC/
+mosdac/
+*.h5
+*.hdf5
+*.nc
+*.nc4
+*.npz
+*.npy
+*.tar
+*.tar.gz
+*.zip
+error_logs/
+logs/
+
+# Python caches and artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+dist-py/
+build/
+*.egg-info/
+
+# Virtual environments
+.env
+.env.*
+.venv/
+env/
+venv/
+ENV/
+
+# IDE and OS
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Transient runtime files
+*.pid
+.blink.pid
+*.log
+*.tmp
+temp/
+tmp/
+.tempmediaStorage/
+tests/
+tests-js/
+annotated_dashboard_images/

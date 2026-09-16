@@ -20,6 +20,13 @@ wheels/
 .installed.cfg
 *.egg
 
+# Node & JS dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
 # Virtual environments
 .env
 .env.*
@@ -72,27 +79,26 @@ error_logs/
 logs/
 .tempmediaStorage/
 
-# Large binaries, arrays & meteorological archives (prevents GitHub 100MB+ push rejects)
-*.h5
-*.hdf5
-*.nc
-*.nc4
-*.npz
-*.npy
-*.tar
-*.tar.gz
-*.gz
-*.zip
-data/raw/*
-data/processed/*
-data/exported_images/*
-data/raw_netcdf/*
-!data/raw_netcdf/.gitkeep
-!data/processed/.gitkeep
+# Large raw archives & transient caches (prevents GitHub 100MB+ push rejects)
 MOSDAC/
 mosdac/
 **/MOSDAC/
 **/mosdac/
+data/raw_netcdf/mosdac/
+data/raw_netcdf/real_satellite/
+data/raw/*
+data/processed/*
+!data/raw_netcdf/.gitkeep
+!data/processed/.gitkeep
+
+# Allow lightweight plug-and-play scenario HDF5s (total ~6.5MB)
+!data/raw_netcdf/*.h5
+
+# Transient archives & compressed dumps
+*.tar
+*.tar.gz
+*.gz
+*.zip
 
 # Model weights & checkpoints
 checkpoints/

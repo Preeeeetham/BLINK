@@ -22,10 +22,25 @@ wheels/
 
 # Virtual environments
 .env
+.env.*
+!.env.example
+*.env
 .venv
 env/
 venv/
 ENV/
+
+# Local configuration & secrets
+config.local.json
+*.local.json
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+credentials.json
+client_secret*.json
 
 # Testing & Coverage
 .pytest_cache/
@@ -42,17 +57,48 @@ htmlcov/
 *~
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# Large binaries & transient meteorological data
-data/**/*.h5
-data/**/*.hdf5
-data/**/*.nc
-data/**/*.nc4
-data/raw/*
-data/processed/*
-!data/raw_netcdf/.gitkeep
-!data/processed/.gitkeep
+# Runtime, logs & transient PID files
+*.pid
+.blink.pid
 *.log
 *.tmp
 temp/
+tmp/
+error_logs/
+**/error_logs/
+logs/
 .tempmediaStorage/
+
+# Large binaries, arrays & meteorological archives (prevents GitHub 100MB+ push rejects)
+*.h5
+*.hdf5
+*.nc
+*.nc4
+*.npz
+*.npy
+*.tar
+*.tar.gz
+*.gz
+*.zip
+data/raw/*
+data/processed/*
+data/exported_images/*
+data/raw_netcdf/*
+!data/raw_netcdf/.gitkeep
+!data/processed/.gitkeep
+MOSDAC/
+mosdac/
+**/MOSDAC/
+**/mosdac/
+
+# Model weights & checkpoints
+checkpoints/
+weights/
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors

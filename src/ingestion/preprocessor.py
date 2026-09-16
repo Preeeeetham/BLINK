@@ -163,31 +163,55 @@ class GeoNormalizer:
             wv = np.clip(arr[1], 0.0, 1.0)
             tir = np.clip(arr[2], 0.0, 1.0)
 
-            # Cloud intensity is strongest where TIR is cold (high normalized value) or VIS is high
-            cloud_intensity = np.maximum(tir * 1.15, vis * 0.95)
-            cloud_norm = np.clip(cloud_intensity, 0.0, 1.0)
-            cloud_gamma = np.power(cloud_norm, 0.8)
+            mode_lower = mode.lower()
+            if "vis" in mode_lower:
+                # 0.65 um Visible Reflectance: Albedo grayscale
+                gray = np.clip(vis * 255.0, 0, 255).astype(np.uint8)
+                return np.stack([gray, gray, gray], axis=-1)
+            elif "wv" in mode_lower:
+                # 6.8 um Water Vapour: Upper-tropospheric moisture flux
+                # Inverted so cold moist upper air is luminous with cyan/blue tint
+                wv_scaled = np.power(wv, 0.85) * 255.0
+                gray = np.clip(wv_scaled, 0, 255)
+                r_out = np.clip(gray * 0.70, 0, 255).astype(np.uint8)
+                g_out = np.clip(gray * 0.88, 0, 255).astype(np.uint8)
+                b_out = gray.astype(np.uint8)
+                return np.stack([r_out, g_out, b_out], axis=-1)
+            elif "tir" in mode_lower:
+                # 10.8 um Thermal IR: High-contrast meteorological thermal scale
+                # Dark background for warm surface, brilliant white/cyan for cold cloud tops (< 220 K)
+                gray = np.clip(np.power(tir, 0.85) * 255.0, 0, 255)
+                r_out = (gray * 0.85).astype(np.uint8)
+                g_out = (gray * 0.95).astype(np.uint8)
+                b_out = gray.astype(np.uint8)
+                # Dvorak-style bright cyan core for severe convective overshoot (> 0.78 / < 215 K)
+                severe = tir > 0.78
+                if np.any(severe):
+                    r_out[severe] = np.clip(180 + (tir[severe] - 0.78) * 340, 0, 255).astype(np.uint8)
+                    g_out[severe] = np.clip(230 + (tir[severe] - 0.78) * 110, 0, 255).astype(np.uint8)
+                    b_out[severe] = 255
+                return np.stack([r_out, g_out, b_out], axis=-1)
+            else:
+                # Multi-Spectral Composite (RGB) combining VIS + WV + TIR1
+                cloud_intensity = np.maximum(tir * 1.15, vis * 0.95)
+                cloud_norm = np.clip(cloud_intensity, 0.0, 1.0)
+                cloud_gamma = np.power(cloud_norm, 0.8)
 
-            # Build rich false-color meteorological composite
-            # Deep ocean/land background: (8, 18, 38)
-            bg_r = 10.0
-            bg_g = 18.0
-            bg_b = 36.0
+                bg_r = 10.0
+                bg_g = 18.0
+                bg_b = 36.0
 
-            # Mid-level clouds: soft cyan/white
-            # Severe convective cloud tops: brilliant luminous white with cyan tint
-            r_out = bg_r * (1.0 - cloud_gamma) + (cloud_gamma * 255.0)
-            g_out = bg_g * (1.0 - cloud_gamma) + (cloud_gamma * 252.0)
-            b_out = bg_b * (1.0 - cloud_gamma) + (cloud_gamma * 248.0)
+                r_out = bg_r * (1.0 - cloud_gamma) + (cloud_gamma * 255.0)
+                g_out = bg_g * (1.0 - cloud_gamma) + (cloud_gamma * 252.0)
+                b_out = bg_b * (1.0 - cloud_gamma) + (cloud_gamma * 248.0)
 
-            # Cold convective cores (TIR > 0.82) glow with intense bright white/cyan
-            severe_mask = np.clip((tir - 0.80) / 0.18, 0.0, 1.0)
-            r_out = np.clip(r_out * (1.0 - severe_mask * 0.15) + severe_mask * 255.0, 0.0, 255.0)
-            g_out = np.clip(g_out * (1.0 - severe_mask * 0.05) + severe_mask * 255.0, 0.0, 255.0)
-            b_out = np.clip(b_out + severe_mask * 20.0, 0.0, 255.0)
+                severe_mask = np.clip((tir - 0.80) / 0.18, 0.0, 1.0)
+                r_out = np.clip(r_out * (1.0 - severe_mask * 0.15) + severe_mask * 255.0, 0.0, 255.0)
+                g_out = np.clip(g_out * (1.0 - severe_mask * 0.05) + severe_mask * 255.0, 0.0, 255.0)
+                b_out = np.clip(b_out + severe_mask * 20.0, 0.0, 255.0)
 
-            rgb = np.stack([r_out, g_out, b_out], axis=-1)
-            return rgb.astype(np.uint8)
+                rgb = np.stack([r_out, g_out, b_out], axis=-1)
+                return rgb.astype(np.uint8)
         else:
             gray = np.clip(arr[0] * 255.0, 0, 255).astype(np.uint8)
             return np.stack([gray, gray, gray], axis=-1)

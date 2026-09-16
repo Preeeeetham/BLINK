@@ -5,7 +5,7 @@ matching the official MOSDAC data download tool (mdapi.py & config.json).
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 import os
@@ -15,6 +15,7 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 import requests
+import numpy as np
 
 
 logger = logging.getLogger("blink.mosdac_client")
@@ -58,24 +59,65 @@ class MOSDACClient:
         password: Optional[str] = None,
         cache_dir: Optional[Union[str, Path]] = None,
     ):
-        self.config_path = Path(config_path) if config_path else Path("config.json")
+        # Prefer config.local.json if caller used default config.json
+        resolved_config = Path(config_path) if config_path else Path("config.json")
+        if resolved_config == Path("config.json") and Path("config.local.json").exists():
+            resolved_config = Path("config.local.json")
+        self.config_path = resolved_config
+
+        # Initial default
         self.cache_dir = Path(cache_dir or "data/raw_netcdf/mosdac")
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.username = username or ""
         self.password = password or ""
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
 
-        # Load from config.json if present
+        # Load from config file first to get custom path and credentials
         self._load_from_config_file()
 
+        # If explicit username/password were passed to constructor, ensure they take precedence
+        if username:
+            self.username = username
+        if password:
+            self.password = password
+
+        # Check environment variables as overrides or fallbacks
+        env_user = os.environ.get("MOSDAC_USERNAME")
+        env_pwd = os.environ.get("MOSDAC_PASSWORD")
+        if env_user:
+            self.username = env_user
+        if env_pwd:
+            self.password = env_pwd
+
+        # NOW ensure directories are created based on final resolved path
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.processed_cache_dir = self.cache_dir / "processed"
+        self.processed_cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Parser for processing HDF5 -> NumPy
+        from src.ingestion.mosdac_parser import MOSDACParser
+        self.parser = MOSDACParser()
+
     def _load_from_config_file(self) -> bool:
-        """Loads credentials from config.json if available."""
-        if not self.config_path.exists():
+        """Loads credentials from config.json or config.local.json if available."""
+        # Prefer config.local.json if available and config_path is default config.json
+        cfg_path = self.config_path
+        if cfg_path == Path("config.json") and Path("config.local.json").exists():
+            cfg_path = Path("config.local.json")
+            self.config_path = cfg_path
+
+        if not cfg_path.exists():
+            # If default config.json doesn't exist, check env vars
+            env_user = os.environ.get("MOSDAC_USERNAME")
+            env_pwd = os.environ.get("MOSDAC_PASSWORD")
+            if env_user:
+                self.username = env_user
+            if env_pwd:
+                self.password = env_pwd
             return False
         try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
+            with open(cfg_path, "r", encoding="utf-8") as f:
                 raw = f.read()
             # Windows path preprocessing
             fixed = re.sub(r'(?<!\\)\\(?![\\/"bfnrtu])', r'\\\\', raw)
@@ -85,20 +127,30 @@ class MOSDACClient:
             user = creds.get("username/email") or creds.get("username")
             pwd = creds.get("password")
 
-            if user and user != "your_username":
+            if user and user not in ("your_username", "your_email@example.com"):
                 self.username = user
-            if pwd and pwd != "your_password":
+            if pwd and pwd not in ("your_password", "your_mosdac_password"):
                 self.password = pwd
+
+            # Environment variables always take precedence if defined
+            env_user = os.environ.get("MOSDAC_USERNAME")
+            env_pwd = os.environ.get("MOSDAC_PASSWORD")
+            if env_user:
+                self.username = env_user
+            if env_pwd:
+                self.password = env_pwd
 
             dl_settings = data.get("download_settings", {})
             custom_dl_path = dl_settings.get("download_path")
-            if custom_dl_path and custom_dl_path != "/home/sys_oper/MOSDAC_Downloads/":
-                self.cache_dir = Path(custom_dl_path)
+            env_dl_path = os.environ.get("MOSDAC_DOWNLOAD_PATH")
+            target_dl_path = env_dl_path or custom_dl_path
+            if target_dl_path and target_dl_path != "/home/sys_oper/MOSDAC_Downloads/":
+                self.cache_dir = Path(target_dl_path)
                 self.cache_dir.mkdir(parents=True, exist_ok=True)
 
             return True
         except Exception as e:
-            logger.warning(f"Could not load config.json: {e}")
+            logger.warning(f"Could not load {cfg_path}: {e}")
             return False
 
     @property
@@ -107,18 +159,21 @@ class MOSDACClient:
         return bool(
             self.username
             and self.password
-            and self.username != "your_username"
-            and self.password != "your_password"
+            and self.username not in ("your_username", "your_email@example.com")
+            and self.password not in ("your_password", "your_mosdac_password")
         )
 
     def set_credentials(self, username: str, password: str) -> None:
-        """Sets and persists credentials to config.json."""
+        """Sets and persists credentials. Saves to config.local.json if default config.json is target."""
         self.username = username.strip()
         self.password = password.strip()
         self.access_token = None
         self.refresh_token = None
 
-        # Update or create config.json
+        # Write to config.local.json if using default config.json to keep git tree clean
+        target_path = Path("config.local.json") if self.config_path == Path("config.json") else self.config_path
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
         config_data = {
             "user_credentials": {
                 "username/email": self.username,
@@ -126,8 +181,8 @@ class MOSDACClient:
             },
             "search_parameters": {
                 "datasetId": self.DEFAULT_DATASET_ID,
-                "startTime": datetime.utcnow().strftime("%Y-%m-%d"),
-                "endTime": datetime.utcnow().strftime("%Y-%m-%d"),
+                "startTime": today_str,
+                "endTime": today_str,
                 "count": "",
                 "boundingBox": "",
                 "gId": "",
@@ -140,8 +195,9 @@ class MOSDACClient:
                 "error_logs_dir": "error_logs",
             },
         }
-        with open(self.config_path, "w", encoding="utf-8") as f:
+        with open(target_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=4)
+        self.config_path = target_path
 
     def authenticate(self) -> bool:
         """
@@ -243,6 +299,54 @@ class MOSDACClient:
             logger.warning(f"MOSDAC download exception: {e}")
         return None
 
+    def get_processed_scan(
+        self,
+        record_id: str,
+        identifier: str,
+        target_size: Optional[Tuple[int, int]] = (512, 512)
+    ) -> Optional[Dict[str, np.ndarray]]:
+        """
+        High-efficiency data fetcher:
+        1. Checks for processed compressed cache.
+        2. If missing, downloads raw HDF5, parses it, saves compressed version, and PURGES raw file.
+        """
+        processed_path = self.processed_cache_dir / (identifier + ".npz")
+
+        if processed_path.exists():
+            try:
+                return self.parser.load_processed_data(processed_path)
+            except Exception as e:
+                logger.warning(f"Failed to load processed cache {processed_path}: {e}")
+
+        # Not in cache, download raw
+        raw_path = self.download_file(record_id, identifier)
+        if raw_path:
+            try:
+                # Process and resample
+                channel_data = self.parser.read_hdf5(raw_path, target_size=target_size)
+                # Save compressed version
+                self.parser.save_processed_data(processed_path, channel_data)
+                # PURGE raw file immediately to save space
+                os.unlink(raw_path)
+                logger.info(f"Processed and purged raw file: {identifier}")
+                return channel_data
+            except Exception as e:
+                logger.error(f"Processing failed for {identifier}: {e}")
+
+        return None
+
+    def fetch_today_pair(self, t0_time_str: str = "00:00", cadence_minutes: int = 15, satellite_id: str = "INSAT-3DS") -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        """
+        Convenience method to pull exactly two images (T0 and T1) for the current date.
+        """
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
+        return self.fetch_scan_pair(
+            date_str=today_str,
+            t0_time_str=t0_time_str,
+            cadence_minutes=cadence_minutes,
+            satellite_id=satellite_id
+        )
+
     def query_available_scans(
         self,
         date_str: str,
@@ -338,17 +442,19 @@ class MOSDACClient:
             scans_t1[0] if scans_t1 else None,
         )
 
-        # If authenticated and record_ids are known, download HDF5 files
+        # If authenticated and record_ids are known, download and process files
         if self.is_configured and match_0 and match_0.get("record_id"):
-            dl0 = self.download_file(match_0["record_id"], match_0["file_name"])
-            if dl0:
-                match_0["local_path"] = str(dl0)
+            data0 = self.get_processed_scan(match_0["record_id"], match_0["file_name"])
+            if data0:
+                match_0["local_path"] = str(self.processed_cache_dir / (match_0["file_name"] + ".npz"))
                 match_0["is_cached"] = True
+                match_0["processed_data"] = data0
 
         if self.is_configured and match_1 and match_1.get("record_id"):
-            dl1 = self.download_file(match_1["record_id"], match_1["file_name"])
-            if dl1:
-                match_1["local_path"] = str(dl1)
+            data1 = self.get_processed_scan(match_1["record_id"], match_1["file_name"])
+            if data1:
+                match_1["local_path"] = str(self.processed_cache_dir / (match_1["file_name"] + ".npz"))
                 match_1["is_cached"] = True
+                match_1["processed_data"] = data1
 
         return match_0, match_1

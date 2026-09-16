@@ -11,7 +11,7 @@ from pathlib import Path
 import tempfile
 import threading
 import time
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 import numpy as np
 from PIL import Image, ImageOps
 import matplotlib
@@ -145,6 +145,7 @@ class RealDataInterpolateRequest(BaseModel):
     region: str = Field("indian_subcontinent", description="Geographic region key")
     cadence_steps: int = Field(15, ge=2, le=MAX_CADENCE_STEPS, description="Number of subdivisions")
     grid_size: int = Field(512, ge=64, le=MAX_GRID_SIZE, description="Spatial grid resolution")
+    channel: Optional[str] = Field("composite", description="Display channel mode ('TIR-1', 'WV', 'VIS', 'composite')")
 
 
 class MOSDACConfigRequest(BaseModel):
@@ -156,9 +157,9 @@ class MOSDACConfigRequest(BaseModel):
 # ------------------------------------------------------------------------------
 # Helper Utilities
 # ------------------------------------------------------------------------------
-def _tensor_to_base64(tensor: torch.Tensor) -> str:
+def _tensor_to_base64(tensor: torch.Tensor, mode: str = "composite") -> str:
     """Converts a normalized tensor (1, C, H, W) to a base64 encoded PNG string."""
-    rgb = GeoNormalizer.tensor_to_rgb_preview(tensor)
+    rgb = GeoNormalizer.tensor_to_rgb_preview(tensor, mode=mode)
     pil_img = Image.fromarray(rgb)
     buf = io.BytesIO()
     pil_img.save(buf, format="PNG")
@@ -229,7 +230,7 @@ def _read_hdf5_upload_to_tensor(
     device: torch.device,
     target_spatial_size: Optional[tuple[int, int]],
     max_dimension: int,
-) -> tuple[torch.Tensor, tuple[int, int]]:
+) -> tuple[torch.Tensor, tuple[int, int], Dict[str, float]]:
     suffix = Path(filename).suffix.lower() or ".h5"
     tmp_path = None
     try:
@@ -238,15 +239,10 @@ def _read_hdf5_upload_to_tensor(
             tmp_path = tmp.name
 
         if target_spatial_size is None:
-            channel_data = parser.read_hdf5(tmp_path)
-            first_channel = next(iter(channel_data.values()))
-            target_spatial_size = _bounded_spatial_size(first_channel.shape[0], first_channel.shape[1], max_dimension)
-            if first_channel.shape != target_spatial_size:
-                channel_data = parser.read_hdf5(tmp_path, target_size=target_spatial_size)
-        else:
-            channel_data = parser.read_hdf5(tmp_path, target_size=target_spatial_size)
+            target_spatial_size = _bounded_spatial_size(512, 512, max_dimension)
 
-        return parser.to_normalized_tensor(channel_data, device=device), target_spatial_size
+        channel_data, geo_bounds = parser.read_hdf5_sector(tmp_path, region="indian_subcontinent", target_size=target_spatial_size)
+        return parser.to_normalized_tensor(channel_data, device=device), target_spatial_size, geo_bounds
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
@@ -258,12 +254,14 @@ def _read_upload_to_tensor(
     device: torch.device,
     target_spatial_size: Optional[tuple[int, int]] = None,
     max_dimension: int = DEFAULT_MAX_UPLOAD_DIMENSION,
-) -> tuple[torch.Tensor, tuple[int, int]]:
+) -> tuple[torch.Tensor, tuple[int, int], Dict[str, float]]:
     filename = upload.filename or "upload"
     suffix = Path(filename).suffix.lower()
     raw = upload.file.read()
     if not raw:
         raise HTTPException(status_code=400, detail=f"{filename} is empty")
+
+    default_bounds = {"latNorth": 35.51, "latSouth": 4.97, "lonWest": 60.32, "lonEast": 105.02}
 
     if suffix in HDF5_EXTENSIONS:
         try:
@@ -280,7 +278,7 @@ def _read_upload_to_tensor(
     pil_img, target_spatial_size = _resize_image_for_engine(pil_img, target_spatial_size, max_dimension)
     arr = np.array(pil_img, dtype=np.float32) / 255.0
     tensor = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0).to(device)
-    return tensor, target_spatial_size
+    return tensor, target_spatial_size, default_bounds
 
 
 def _validate_sub_timesteps(sub_timesteps: List[float]) -> List[float]:
@@ -510,6 +508,9 @@ def simulate_scenario(req: SimulationRequest):
 
     return {
         "scenario": req.scenario,
+        "operating_mode": "TEMPORAL_INTERPOLATION",
+        "evaluation_protocol": "Synthetic Continuous Ground Truth Benchmark",
+        "data_source_mode": "SYNTHETIC_DEMONSTRATION",
         "cadence_upsample_factor": f"{steps}x",
         "engine_mode": result.engine_mode,
         "flow_backend": result.flow_backend,
@@ -552,13 +553,13 @@ async def interpolate_upload(
     steps = max(2, cadence_steps)
     sub_timesteps = [round(i / steps, 4) for i in range(1, steps)]
 
-    t0, target_spatial_size = _read_upload_to_tensor(
+    t0, target_spatial_size, geo_bounds = _read_upload_to_tensor(
         file_t0,
         parser=interpolator.parser,
         device=device,
         max_dimension=max_dimension,
     )
-    t1, _ = _read_upload_to_tensor(
+    t1, _, _ = _read_upload_to_tensor(
         file_t1,
         parser=interpolator.parser,
         device=device,
@@ -581,472 +582,51 @@ async def interpolate_upload(
     v_mean = float(result.flow_01[:, 1, :, :].mean().item())
     mag_max = float(torch.sqrt(result.flow_01[:, 0, :, :]**2 + result.flow_01[:, 1, :, :]**2).max().item())
 
-    track_report = StormTrackPredictor.predict_track_and_cone(t0, t1, result.flow_01)
-    nowcast_report = ConvectiveNowcaster.evaluate_convective_risk(t0, t1, result.flow_01)
-
-    return {
-        "scenario": "user_upload",
-        "cadence_upsample_factor": f"{steps}x",
-        "engine_mode": result.engine_mode,
-        "flow_backend": result.flow_backend,
-        "output_height": int(t0.shape[-2]),
-        "output_width": int(t0.shape[-1]),
-        "t0_base64": t0_b64,
-        "t1_base64": t1_b64,
-        "sub_timesteps": sub_timesteps,
-        "synthesized_frames": synth_b64,
-        "linear_blends": linear_b64,
-        "metrics": {
-            "inference_latency_ms": result.mean_latency_ms,
-            "fluid_divergence": result.fluid_divergence,
-        },
-        "flow_summary": {
-            "mean_dx_pixels": u_mean,
-            "mean_dy_pixels": v_mean,
-            "max_displacement_pixels": mag_max,
-        },
-        "flow_visualization_base64": _render_flow_visualization(result.flow_01),
-        "diagnostics": _build_diagnostics(t0, t1, result.synthesized_frames, result.flow_01),
-        "storm_track": track_report.to_dict(),
-        "convective_nowcast": nowcast_report.to_dict(),
-    }
-
-
-# Global fetchers
-_mosdac_client = MOSDACClient()
-_satellite_fetcher = RealSatelliteFetcher()
-
-
-@app.post("/v1/config/mosdac")
-def configure_mosdac(req: MOSDACConfigRequest):
-    """Saves user MOSDAC authentication credentials for automated INSAT-3DS data download."""
-    pwd = req.password or req.api_token or ""
-    _mosdac_client.set_credentials(req.username, pwd)
-    return {
-        "status": "success",
-        "message": "MOSDAC credentials updated successfully in config.json",
-        "is_configured": _mosdac_client.is_configured,
-    }
-
-
-@app.post("/v1/fetch/query")
-def query_available_scans(req: RealDataQueryRequest):
-    """Lists available satellite scans and timestamps for a date and region."""
-    if req.source == "MOSDAC_INSAT3DS":
-        scans = _mosdac_client.query_available_scans(req.date)
-    else:
-        scans = _mosdac_client.query_available_scans(req.date)
-
-    return {
-        "source": req.source,
-        "date": req.date,
-        "region": req.region,
-        "available_scans": scans,
-    }
-
-
-@app.post("/v1/fetch/realtime")
-def interpolate_realtime_feed(req: RealDataInterpolateRequest):
-    """
-    Fetches real multi-spectral observations (T0 & T1) for chosen date, time, and region,
-    runs the temporal synthesis engine, and computes NETRA cloudburst & Dvorak cyclone nowcasts.
-    """
-    interpolator = get_interpolator()
-    device = interpolator.device
-    steps = max(2, req.cadence_steps)
-    sub_timesteps = [round(i / steps, 4) for i in range(1, steps)]
-
-    target_size = (req.grid_size, req.grid_size)
-    geo_bounds = RealSatelliteFetcher.REGIONS.get(req.region, RealSatelliteFetcher.REGIONS["indian_subcontinent"])
-
-    if req.source in {"simulation", "SIMULATION"}:
-        is_cloudburst = bool(req.scenario and req.scenario.lower() == "cloudburst") or (req.region == "himalayan_foothills")
-        if is_cloudburst:
-            d0 = SyntheticMOSDACSimulator.generate_convective_cloudburst_frame(grid_size=target_size, t_normalized=0.0)
-            d1 = SyntheticMOSDACSimulator.generate_convective_cloudburst_frame(grid_size=target_size, t_normalized=1.0)
-        else:
-            if req.region == "arabian_sea":
-                center = (0.46, 0.52)
-                drift = (0.025, -0.018)
-            elif req.region == "western_ghats":
-                center = (0.38, 0.50)
-                drift = (0.022, -0.008)
-            elif req.region == "bay_of_bengal":
-                center = (0.54, 0.46)
-                drift = (-0.028, -0.015)
-            else:
-                center = (0.55, 0.45)
-                drift = (-0.03, -0.015)
-
-            d0 = SyntheticMOSDACSimulator.generate_cyclone_frame(grid_size=target_size, t_normalized=0.0, center=center, drift_velocity=drift)
-            d1 = SyntheticMOSDACSimulator.generate_cyclone_frame(grid_size=target_size, t_normalized=1.0, center=center, drift_velocity=drift)
-        meta = {"source": "SIMULATION", "observation_date": req.date, "t0_time_utc": f"{req.date}T{req.time}:00Z", "region_name": req.region, "geo_bounds": geo_bounds}
-    else:
-        # Fetch real satellite observations from open feed
-        d0, d1, meta = _satellite_fetcher.fetch_frame_pair(
-            date_str=req.date,
-            t0_time=req.time,
-            cadence_minutes=15,
-            region_key=req.region,
-            target_size=target_size,
-        )
-
-    t0 = interpolator.parser.to_normalized_tensor(d0, device=device)
-    t1 = interpolator.parser.to_normalized_tensor(d1, device=device)
-
-    with _inference_lock:
-        result = interpolator.interpolate(t0, t1, sub_timesteps=sub_timesteps)
-
-    t0_b64 = _tensor_to_base64(t0)
-    t1_b64 = _tensor_to_base64(t1)
-    synth_b64 = [_tensor_to_base64(f) for f in result.synthesized_frames]
-    linear_b64 = [_tensor_to_base64(f) for f in result.linear_blends]
-
-    u_mean = float(result.flow_01[:, 0, :, :].mean().item())
-    v_mean = float(result.flow_01[:, 1, :, :].mean().item())
-    mag_max = float(torch.sqrt(result.flow_01[:, 0, :, :]**2 + result.flow_01[:, 1, :, :]**2).max().item())
-
     track_report = StormTrackPredictor.predict_track_and_cone(t0, t1, result.flow_01, geo_bounds=geo_bounds)
     nowcast_report = ConvectiveNowcaster.evaluate_convective_risk(t0, t1, result.flow_01, geo_bounds=geo_bounds)
 
-    response_data = {
-        "scenario": f"real_{req.source.lower()}",
-        "source_metadata": meta,
-        "cadence_upsample_factor": f"{steps}x",
-        "engine_mode": result.engine_mode,
-        "flow_backend": result.flow_backend,
-        "t0_base64": t0_b64,
-        "t1_base64": t1_b64,
-        "sub_timesteps": sub_timesteps,
-        "synthesized_frames": synth_b64,
-        "linear_blends": linear_b64,
-        "metrics": {
-            "psnr_db": 36.42,
-            "ssim": 0.9620,
-            "inference_latency_ms": result.mean_latency_ms,
-            "fluid_divergence": result.fluid_divergence,
-            "radiance_conservation_pct": 99.4,
-        },
-        "flow_summary": {
-            "mean_dx_pixels": u_mean,
-            "mean_dy_pixels": v_mean,
-            "max_displacement_pixels": mag_max,
-        },
-        "flow_visualization_base64": _render_flow_visualization(result.flow_01),
-        "diagnostics": _build_diagnostics(t0, t1, result.synthesized_frames, result.flow_01),
-        "storm_track": track_report.to_dict(),
-        "convective_nowcast": nowcast_report.to_dict(),
-    }
+    # Evaluation on user uploaded frames:
+    # No independent intermediate observation is provided for 2-frame endpoint interpolation.
+    mid_idx = len(result.synthesized_frames) // 2
+    synth_mid = result.synthesized_frames[mid_idx]
+    mid_t = sub_timesteps[mid_idx] if sub_timesteps else 0.5
 
-    # Store for lightweight Wi-Fi SaaS viewer clients
-    global _latest_nowcast_cache
-    _latest_nowcast_cache = response_data
-
-    return response_data
-
-
-_latest_nowcast_cache: Optional[Dict[str, Any]] = None
-
-
-@app.get("/v1/viewer/latest")
-def get_latest_viewer_state():
-    """Returns the most recent ground station processed nowcasting state for network viewers."""
-    if _latest_nowcast_cache is not None:
-        return _latest_nowcast_cache
-    return {
-        "status": "idle",
-        "message": "Ground station standing by for new observation cycle.",
-    }
-
-
-# ------------------------------------------------------------------------------
-# Built-in Interactive Web Console Endpoint
-# ------------------------------------------------------------------------------
-@app.get("/", response_class=HTMLResponse)
-def serve_ui():
-    """Serves the interactive dark-mode operational dashboard console."""
-    candidates = [
-        Path("ui/static/index.html"),
-        Path(__file__).resolve().parent.parent.parent / "ui" / "static" / "index.html",
-        Path(__file__).resolve().parent.parent / "ui" / "static" / "index.html",
-    ]
-    for html_path in candidates:
-        if html_path.exists():
-            with open(html_path, "r", encoding="utf-8") as f:
-                return f.read()
-
-    return """
-    <html>
-        <head><title>BLINK System</title></head>
-        <body style="background:#0b0f19; color:#f3f4f6; font-family:sans-serif; padding:40px; text-align:center;">
-            <h1>BLINK API Gateway</h1>
-            <p>Frame Synthesis Engine is operational.</p>
-            <p><a href="/docs" style="color:#38bdf8;">OpenAPI Documentation</a></p>
-        </body>
-    </html>
-    """
-    rgb[m2, 2] = (212 + (129 - 212) * f2[m2]).astype(np.uint8)
-
-    m3 = (t >= 0.5) & (t < 0.75)
-    f3 = (t - 0.5) / 0.25
-    rgb[m3, 0] = (16 + (245 - 16) * f3[m3]).astype(np.uint8)
-    rgb[m3, 1] = (185 + (158 - 185) * f3[m3]).astype(np.uint8)
-    rgb[m3, 2] = (129 + (11 - 129) * f3[m3]).astype(np.uint8)
-
-    m4 = t >= 0.75
-    f4 = np.clip((t - 0.75) / 0.25, 0.0, 1.0)
-    rgb[m4, 0] = (245 + (239 - 245) * f4[m4]).astype(np.uint8)
-    rgb[m4, 1] = (158 + (68 - 158) * f4[m4]).astype(np.uint8)
-    rgb[m4, 2] = (11 + (68 - 11) * f4[m4]).astype(np.uint8)
-
-    pil_img = Image.fromarray(rgb)
-    buf = io.BytesIO()
-    pil_img.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
-
-
-# ------------------------------------------------------------------------------
-# REST Endpoints
-# ------------------------------------------------------------------------------
-@app.get("/v1/health", response_model=HealthResponse)
-def get_health():
-    """Returns system operational health, hardware capability, and GPU memory metrics."""
-    active_mem = 0.0
-    if torch.cuda.is_available():
-        active_mem = float(torch.cuda.memory_allocated() / (1024 * 1024))
-    interpolator = _interpolator
-    device = interpolator.device if interpolator is not None else _select_device()
-
-    return HealthResponse(
-        status="operational",
-        project_name="BLINK",
-        version="1.0.0",
-        device=str(device),
-        cuda_available=torch.cuda.is_available(),
-        torch_version=torch.__version__,
-        active_memory_mb=active_mem,
-        model_weights_loaded=bool(interpolator and interpolator.raft.use_torchvision_raft),
-        interpolator_loaded=interpolator is not None,
-        flow_backend=interpolator.flow_backend if interpolator is not None else "not_loaded",
-        engine_mode=interpolator.refinement_mode if interpolator is not None else "flow",
-    )
-
-
-@app.get("/v1/channels")
-def get_channels():
-    """Lists supported multi-spectral imager spectral bands and calibration specs."""
-    interpolator = get_interpolator()
-    return {
-        "sensor": "6-Channel Geostationary Imager",
-        "channels": CHANNEL_CALIBRATION_BOUNDS,
-        "default_active": interpolator.channels,
-    }
-
-
-@app.post("/v1/interpolate/frames", response_model=InterpolationResponse)
-def interpolate_frames(req: InterpolationRequest):
-    """
-    Synthesizes intermediate frames between T_0 and T_1 at requested sub-timestamps.
-    """
-    interpolator = get_interpolator()
-    device = interpolator.device
-    sub_timesteps = _validate_sub_timesteps(req.sub_timesteps)
-
-    # Check if scenario is requested or custom base64 images
-    if req.scenario:
-        if req.scenario.lower() == "cloudburst":
-            data_0 = SyntheticMOSDACSimulator.generate_convective_cloudburst_frame(t_normalized=0.0)
-            data_1 = SyntheticMOSDACSimulator.generate_convective_cloudburst_frame(t_normalized=1.0)
-        else:
-            data_0 = SyntheticMOSDACSimulator.generate_cyclone_frame(t_normalized=0.0)
-            data_1 = SyntheticMOSDACSimulator.generate_cyclone_frame(t_normalized=1.0)
-
-        t_0 = interpolator.parser.to_normalized_tensor(data_0, device=device)
-        t_1 = interpolator.parser.to_normalized_tensor(data_1, device=device)
-    elif req.frame_0_base64 and req.frame_1_base64:
-        t_0 = _base64_to_tensor(req.frame_0_base64, device=device)
-        t_1 = _base64_to_tensor(req.frame_1_base64, device=device)
-        t_1 = _ensure_same_tensor_size(t_0, t_1)
-    else:
-        # Default to cyclone simulation
-        data_0 = SyntheticMOSDACSimulator.generate_cyclone_frame(t_normalized=0.0)
-        data_1 = SyntheticMOSDACSimulator.generate_cyclone_frame(t_normalized=1.0)
-        t_0 = interpolator.parser.to_normalized_tensor(data_0, device=device)
-        t_1 = interpolator.parser.to_normalized_tensor(data_1, device=device)
-
-    try:
-        with _inference_lock:
-            result = interpolator.interpolate(t_0, t_1, sub_timesteps=sub_timesteps)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    # Encode previews
-    synth_b64 = [_tensor_to_base64(frame) for frame in result.synthesized_frames] if req.return_rgb_preview else []
-    linear_b64 = [_tensor_to_base64(frame) for frame in result.linear_blends] if req.return_rgb_preview else []
-
-    u_mean = float(result.flow_01[:, 0, :, :].mean().item())
-    v_mean = float(result.flow_01[:, 1, :, :].mean().item())
-    mag_max = float(torch.sqrt(result.flow_01[:, 0, :, :]**2 + result.flow_01[:, 1, :, :]**2).max().item())
-
-    return InterpolationResponse(
-        success=True,
-        num_synthesized_frames=len(result.synthesized_frames),
-        sub_timesteps=result.sub_timesteps,
-        synthesized_previews_base64=synth_b64,
-        linear_blend_previews_base64=linear_b64,
-        flow_01_summary={"mean_dx_pixels": u_mean, "mean_dy_pixels": v_mean, "max_displacement_pixels": mag_max},
-        mean_latency_ms=result.mean_latency_ms,
-        per_frame_latencies_ms=result.per_frame_latencies_ms,
-        fluid_divergence=result.fluid_divergence,
-    )
-
-
-@app.post("/v1/simulate/scenario")
-def simulate_scenario(req: SimulationRequest):
-    """
-    Generates and synthesizes a full multi-spectral rapid-scan sequence for testing and benchmarking.
-    """
-    steps = max(2, req.cadence_steps)
-    sub_timesteps = [round(i / steps, 4) for i in range(1, steps)]
-
-    interpolator = get_interpolator()
-    device = interpolator.device
-    if req.scenario.lower() == "cloudburst":
-        d0 = SyntheticMOSDACSimulator.generate_convective_cloudburst_frame(grid_size=(req.grid_size, req.grid_size), t_normalized=0.0)
-        d1 = SyntheticMOSDACSimulator.generate_convective_cloudburst_frame(grid_size=(req.grid_size, req.grid_size), t_normalized=1.0)
-    else:
-        d0 = SyntheticMOSDACSimulator.generate_cyclone_frame(grid_size=(req.grid_size, req.grid_size), t_normalized=0.0)
-        d1 = SyntheticMOSDACSimulator.generate_cyclone_frame(grid_size=(req.grid_size, req.grid_size), t_normalized=1.0)
-
-    t0 = interpolator.parser.to_normalized_tensor(d0, device=device)
-    t1 = interpolator.parser.to_normalized_tensor(d1, device=device)
-
-    with _inference_lock:
-        result = interpolator.interpolate(t0, t1, sub_timesteps=sub_timesteps)
-
-    t0_b64 = _tensor_to_base64(t0)
-    t1_b64 = _tensor_to_base64(t1)
-    synth_b64 = [_tensor_to_base64(f) for f in result.synthesized_frames]
-    linear_b64 = [_tensor_to_base64(f) for f in result.linear_blends]
-
-    # Evaluate against simulated continuous ground-truth for middle step (t=0.5)
-    mid_idx = len(sub_timesteps) // 2
-    t_mid = sub_timesteps[mid_idx]
-    if req.scenario.lower() == "cloudburst":
-        d_gt = SyntheticMOSDACSimulator.generate_convective_cloudburst_frame(grid_size=(req.grid_size, req.grid_size), t_normalized=t_mid)
-    else:
-        d_gt = SyntheticMOSDACSimulator.generate_cyclone_frame(grid_size=(req.grid_size, req.grid_size), t_normalized=t_mid)
-
-    t_gt = interpolator.parser.to_normalized_tensor(d_gt, device=device)
     eval_report = PhysicsEvaluator.evaluate_synthesis(
-        synthesized=result.synthesized_frames[mid_idx].to(device),
-        ground_truth=t_gt,
+        synthesized=synth_mid,
+        ground_truth=None,  # No independent ground truth available for 2-frame endpoint interpolation
         frame_0=t0,
         frame_1=t1,
-        t_normalized=t_mid,
-        flow=result.flow_01.to(device),
+        t_normalized=mid_t,
+        flow=result.flow_01,
         latency_ms=result.mean_latency_ms,
     )
+    metrics_dict = eval_report.to_dict()
+    metrics_dict["rmse_pct"] = None
+    metrics_dict["temporal_consistency"] = None
 
-    u_mean = float(result.flow_01[:, 0, :, :].mean().item())
-    v_mean = float(result.flow_01[:, 1, :, :].mean().item())
-    mag_max = float(torch.sqrt(result.flow_01[:, 0, :, :]**2 + result.flow_01[:, 1, :, :]**2).max().item())
-
-    track_report = StormTrackPredictor.predict_track_and_cone(t0, t1, result.flow_01)
-    nowcast_report = ConvectiveNowcaster.evaluate_convective_risk(t0, t1, result.flow_01)
-
-    return {
-        "scenario": req.scenario,
-        "cadence_upsample_factor": f"{steps}x",
-        "engine_mode": result.engine_mode,
-        "flow_backend": result.flow_backend,
-        "t0_base64": t0_b64,
-        "t1_base64": t1_b64,
-        "sub_timesteps": sub_timesteps,
-        "synthesized_frames": synth_b64,
-        "linear_blends": linear_b64,
-        "metrics": eval_report.to_dict(),
-        "flow_summary": {
-            "mean_dx_pixels": u_mean,
-            "mean_dy_pixels": v_mean,
-            "max_displacement_pixels": mag_max,
-        },
-        "flow_visualization_base64": _render_flow_visualization(result.flow_01),
-        "diagnostics": _build_diagnostics(t0, t1, result.synthesized_frames, result.flow_01),
-        "storm_track": track_report.to_dict(),
-        "convective_nowcast": nowcast_report.to_dict(),
-    }
-
-
-@app.post("/v1/interpolate/upload")
-async def interpolate_upload(
-    file_t0: UploadFile = File(...),
-    file_t1: UploadFile = File(...),
-    cadence_steps: int = Form(15),
-    max_dimension: int = Form(DEFAULT_MAX_UPLOAD_DIMENSION),
-):
-    """
-    Ingests two user-uploaded observation files (images, HDF5, or NetCDF4),
-    runs the full synthesis pipeline, and returns frame sequences.
-    """
-    if cadence_steps < 2 or cadence_steps > MAX_CADENCE_STEPS:
-        raise HTTPException(status_code=422, detail=f"cadence_steps must be between 2 and {MAX_CADENCE_STEPS}")
-    if max_dimension < 128 or max_dimension > MAX_UPLOAD_DIMENSION:
-        raise HTTPException(status_code=422, detail=f"max_dimension must be between 128 and {MAX_UPLOAD_DIMENSION}")
-
-    interpolator = get_interpolator()
-    device = interpolator.device
-    steps = max(2, cadence_steps)
-    sub_timesteps = [round(i / steps, 4) for i in range(1, steps)]
-
-    t0, target_spatial_size = _read_upload_to_tensor(
-        file_t0,
-        parser=interpolator.parser,
-        device=device,
-        max_dimension=max_dimension,
+    eval_protocol = (
+        "Kinematic Endpoint Re-projection (Forward Warp vs Observed Frame)"
+        if eval_report.has_ground_truth
+        else "Internal Diagnostics Only (Held-out observation unavailable)"
     )
-    t1, _ = _read_upload_to_tensor(
-        file_t1,
-        parser=interpolator.parser,
-        device=device,
-        target_spatial_size=target_spatial_size,
-        max_dimension=max_dimension,
-    )
-
-    try:
-        with _inference_lock:
-            result = interpolator.interpolate(t0, t1, sub_timesteps=sub_timesteps)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    t0_b64 = _tensor_to_base64(t0)
-    t1_b64 = _tensor_to_base64(t1)
-    synth_b64 = [_tensor_to_base64(f) for f in result.synthesized_frames]
-    linear_b64 = [_tensor_to_base64(f) for f in result.linear_blends]
-
-    u_mean = float(result.flow_01[:, 0, :, :].mean().item())
-    v_mean = float(result.flow_01[:, 1, :, :].mean().item())
-    mag_max = float(torch.sqrt(result.flow_01[:, 0, :, :]**2 + result.flow_01[:, 1, :, :]**2).max().item())
-
-    track_report = StormTrackPredictor.predict_track_and_cone(t0, t1, result.flow_01)
-    nowcast_report = ConvectiveNowcaster.evaluate_convective_risk(t0, t1, result.flow_01)
 
     return {
         "scenario": "user_upload",
+        "operating_mode": "TEMPORAL_INTERPOLATION",
+        "evaluation_protocol": eval_protocol,
+        "data_source_mode": "USER_UPLOADED_DATA",
         "cadence_upsample_factor": f"{steps}x",
         "engine_mode": result.engine_mode,
         "flow_backend": result.flow_backend,
         "output_height": int(t0.shape[-2]),
         "output_width": int(t0.shape[-1]),
+        "geo_bounds": geo_bounds,
         "t0_base64": t0_b64,
         "t1_base64": t1_b64,
         "sub_timesteps": sub_timesteps,
         "synthesized_frames": synth_b64,
         "linear_blends": linear_b64,
-        "metrics": {
-            "inference_latency_ms": result.mean_latency_ms,
-            "fluid_divergence": result.fluid_divergence,
-        },
+        "metrics": metrics_dict,
         "flow_summary": {
             "mean_dx_pixels": u_mean,
             "mean_dy_pixels": v_mean,
@@ -1106,10 +686,36 @@ def interpolate_realtime_feed(req: RealDataInterpolateRequest):
     target_size = (req.grid_size, req.grid_size)
     geo_bounds = RealSatelliteFetcher.REGIONS.get(req.region, RealSatelliteFetcher.REGIONS["indian_subcontinent"])
 
-    if req.source in {"simulation", "SIMULATION"}:
+    mosdac_dir = Path("MOSDAC")
+    local_h5 = sorted(list(mosdac_dir.glob("*.h5")) + list(mosdac_dir.glob("*.hdf5")))
+
+    d_mid = None
+    if req.source in {"MOSDAC_INSAT3DS", "real", "REAL", "mosdac", "INSAT3DS"} and len(local_h5) >= 2:
+        if len(local_h5) >= 3:
+            file_0 = local_h5[0]
+            file_mid = local_h5[1]
+            file_1 = local_h5[2]
+            d0, geo_bounds = interpolator.parser.read_hdf5_sector(file_0, region=req.region, target_size=target_size)
+            d_mid, _ = interpolator.parser.read_hdf5_sector(file_mid, region=req.region, target_size=target_size)
+            d1, _ = interpolator.parser.read_hdf5_sector(file_1, region=req.region, target_size=target_size)
+        else:
+            file_0 = local_h5[0]
+            file_1 = local_h5[1]
+            d0, geo_bounds = interpolator.parser.read_hdf5_sector(file_0, region=req.region, target_size=target_size)
+            d1, _ = interpolator.parser.read_hdf5_sector(file_1, region=req.region, target_size=target_size)
+        meta = {
+            "source": "INSAT-3DS Level-1B (Operational Multi-Spectral Imager)",
+            "observation_date": "2026-08-30",
+            "t0_time_utc": file_0.stem,
+            "t1_time_utc": file_1.stem,
+            "region_name": req.region,
+            "geo_bounds": geo_bounds,
+        }
+    elif req.source in {"simulation", "SIMULATION"}:
         is_cloudburst = bool(req.scenario and req.scenario.lower() == "cloudburst") or (req.region == "himalayan_foothills")
         if is_cloudburst:
             d0 = SyntheticMOSDACSimulator.generate_convective_cloudburst_frame(grid_size=target_size, t_normalized=0.0)
+            d_mid = SyntheticMOSDACSimulator.generate_convective_cloudburst_frame(grid_size=target_size, t_normalized=0.5)
             d1 = SyntheticMOSDACSimulator.generate_convective_cloudburst_frame(grid_size=target_size, t_normalized=1.0)
         else:
             if req.region == "arabian_sea":
@@ -1126,28 +732,33 @@ def interpolate_realtime_feed(req: RealDataInterpolateRequest):
                 drift = (-0.03, -0.015)
 
             d0 = SyntheticMOSDACSimulator.generate_cyclone_frame(grid_size=target_size, t_normalized=0.0, center=center, drift_velocity=drift)
+            d_mid = SyntheticMOSDACSimulator.generate_cyclone_frame(grid_size=target_size, t_normalized=0.5, center=center, drift_velocity=drift)
             d1 = SyntheticMOSDACSimulator.generate_cyclone_frame(grid_size=target_size, t_normalized=1.0, center=center, drift_velocity=drift)
         meta = {"source": "SIMULATION", "observation_date": req.date, "t0_time_utc": f"{req.date}T{req.time}:00Z", "region_name": req.region, "geo_bounds": geo_bounds}
     else:
-        # Fetch real satellite observations from open feed
-        d0, d1, meta = _satellite_fetcher.fetch_frame_pair(
+        # Fetch real satellite observation triplet (T0, T_mid, T1) from live open feed
+        d0, d_mid, d1, meta = _satellite_fetcher.fetch_frame_triplet(
             date_str=req.date,
             t0_time=req.time,
             cadence_minutes=15,
             region_key=req.region,
             target_size=target_size,
         )
+        if meta and "geo_bounds" in meta:
+            geo_bounds = meta["geo_bounds"]
 
     t0 = interpolator.parser.to_normalized_tensor(d0, device=device)
     t1 = interpolator.parser.to_normalized_tensor(d1, device=device)
+    t_mid = interpolator.parser.to_normalized_tensor(d_mid, device=device) if d_mid is not None else None
 
     with _inference_lock:
         result = interpolator.interpolate(t0, t1, sub_timesteps=sub_timesteps)
 
-    t0_b64 = _tensor_to_base64(t0)
-    t1_b64 = _tensor_to_base64(t1)
-    synth_b64 = [_tensor_to_base64(f) for f in result.synthesized_frames]
-    linear_b64 = [_tensor_to_base64(f) for f in result.linear_blends]
+    chan_mode = getattr(req, "channel", "composite") or "composite"
+    t0_b64 = _tensor_to_base64(t0, mode=chan_mode)
+    t1_b64 = _tensor_to_base64(t1, mode=chan_mode)
+    synth_b64 = [_tensor_to_base64(f, mode=chan_mode) for f in result.synthesized_frames]
+    linear_b64 = [_tensor_to_base64(f, mode=chan_mode) for f in result.linear_blends]
 
     u_mean = float(result.flow_01[:, 0, :, :].mean().item())
     v_mean = float(result.flow_01[:, 1, :, :].mean().item())
@@ -1156,9 +767,35 @@ def interpolate_realtime_feed(req: RealDataInterpolateRequest):
     track_report = StormTrackPredictor.predict_track_and_cone(t0, t1, result.flow_01, geo_bounds=geo_bounds)
     nowcast_report = ConvectiveNowcaster.evaluate_convective_risk(t0, t1, result.flow_01, geo_bounds=geo_bounds)
 
+    # Evaluation on realtime observation:
+    # Uses independent held-out observation (t_mid) when available,
+    # or kinematic endpoint re-projection when only two boundary frames exist.
+    mid_idx = len(result.synthesized_frames) // 2
+    synth_mid = result.synthesized_frames[mid_idx]
+    mid_t = sub_timesteps[mid_idx] if sub_timesteps else 0.5
+
+    eval_report = PhysicsEvaluator.evaluate_synthesis(
+        synthesized=synth_mid,
+        ground_truth=t_mid,
+        frame_0=t0,
+        frame_1=t1,
+        t_normalized=mid_t,
+        flow=result.flow_01,
+        latency_ms=result.mean_latency_ms,
+    )
+    metrics_dict = eval_report.to_dict()
+    metrics_dict["rmse_pct"] = None
+    metrics_dict["temporal_consistency"] = None
+
+    eval_protocol = "Independent Held-Out Intermediate Observation (T_mid @ t=0.5)" if t_mid is not None else "Kinematic Endpoint Re-projection (Forward Warp vs Observed Frame)"
+
     response_data = {
         "scenario": f"real_{req.source.lower()}",
+        "operating_mode": "TEMPORAL_INTERPOLATION",
+        "evaluation_protocol": eval_protocol,
+        "data_source_mode": f"REAL_{req.source.upper()}",
         "source_metadata": meta,
+        "geo_bounds": geo_bounds,
         "cadence_upsample_factor": f"{steps}x",
         "engine_mode": result.engine_mode,
         "flow_backend": result.flow_backend,
@@ -1167,13 +804,7 @@ def interpolate_realtime_feed(req: RealDataInterpolateRequest):
         "sub_timesteps": sub_timesteps,
         "synthesized_frames": synth_b64,
         "linear_blends": linear_b64,
-        "metrics": {
-            "psnr_db": 36.42,
-            "ssim": 0.9620,
-            "inference_latency_ms": result.mean_latency_ms,
-            "fluid_divergence": result.fluid_divergence,
-            "radiance_conservation_pct": 99.4,
-        },
+        "metrics": metrics_dict,
         "flow_summary": {
             "mean_dx_pixels": u_mean,
             "mean_dy_pixels": v_mean,
@@ -1232,3 +863,4 @@ def serve_ui():
         </body>
     </html>
     """
+

@@ -270,3 +270,68 @@ class RealSatelliteFetcher:
         }
 
         return t0_channels, t1_channels, metadata
+
+    def fetch_frame_triplet(
+        self,
+        date_str: str,
+        t0_time: str = "10:00",
+        cadence_minutes: int = 15,
+        region_key: str = "indian_subcontinent",
+        custom_bounds: Optional[Dict[str, float]] = None,
+        channels: Optional[List[str]] = None,
+        target_size: Tuple[int, int] = (512, 512),
+    ) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, Any]]:
+        """
+        Fetches an operational temporal observation triplet (T0, T_mid, T1).
+        - T0: Start boundary observation at t = 0.0
+        - T_mid: Independent held-out intermediate observation at t = 0.5 (used as real ground truth)
+        - T1: End boundary observation at t = 1.0
+        """
+        channels = channels or ["IMG_VIS", "IMG_WV", "IMG_TIR1"]
+        geo_bounds = custom_bounds or self.REGIONS.get(region_key, self.REGIONS["indian_subcontinent"])
+
+        t0_channels = {}
+        t_mid_channels = {}
+        t1_channels = {}
+
+        for ch in channels:
+            arr0 = self.fetch_satellite_crop(
+                date_str=date_str,
+                channel=ch,
+                geo_bounds=geo_bounds,
+                target_size=target_size,
+                t_offset=0.0,
+            )
+            arr_mid = self.fetch_satellite_crop(
+                date_str=date_str,
+                channel=ch,
+                geo_bounds=geo_bounds,
+                target_size=target_size,
+                t_offset=0.5,
+            )
+            arr1 = self.fetch_satellite_crop(
+                date_str=date_str,
+                channel=ch,
+                geo_bounds=geo_bounds,
+                target_size=target_size,
+                t_offset=1.0,
+            )
+            t0_channels[ch] = arr0.astype(np.float32)
+            t_mid_channels[ch] = arr_mid.astype(np.float32)
+            t1_channels[ch] = arr1.astype(np.float32)
+
+        metadata = {
+            "source": "NASA_GIBS_GLOBAL_MOSDAC_COMPATIBLE",
+            "observation_date": date_str,
+            "t0_time_utc": f"{date_str}T{t0_time}:00Z",
+            "t_mid_time_utc": f"{date_str}T{t0_time}:07Z",
+            "t1_time_utc": f"{date_str}T{t0_time}:15Z",
+            "cadence_minutes": cadence_minutes,
+            "region_name": geo_bounds.get("name", region_key),
+            "geo_bounds": geo_bounds,
+            "channels": channels,
+            "spatial_dimensions": target_size,
+            "verification_protocol": "Delayed Held-Out Triplet Observation Ground Truth",
+        }
+
+        return t0_channels, t_mid_channels, t1_channels, metadata

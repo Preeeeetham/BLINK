@@ -31,3 +31,22 @@ def test_real_satellite_fetcher_pair(tmp_path):
     assert d0["IMG_TIR1"].shape == (64, 64)
     assert d1["IMG_TIR1"].shape == (64, 64)
     assert meta["observation_date"] == "2026-08-28"
+
+
+def test_real_satellite_fetcher_triplet(tmp_path):
+    fetcher = RealSatelliteFetcher(cache_dir=tmp_path)
+    d0, d_mid, d1, meta = fetcher.fetch_frame_triplet(
+        date_str="2026-08-28",
+        t0_time="10:00",
+        region_key="bay_of_bengal",
+        target_size=(64, 64),
+    )
+
+    assert "IMG_VIS" in d0 and "IMG_VIS" in d_mid and "IMG_VIS" in d1
+    assert "IMG_WV" in d0 and "IMG_WV" in d_mid and "IMG_WV" in d1
+    assert "IMG_TIR1" in d0 and "IMG_TIR1" in d_mid and "IMG_TIR1" in d1
+    assert d0["IMG_TIR1"].shape == (64, 64)
+    assert d_mid["IMG_TIR1"].shape == (64, 64)
+    assert d1["IMG_TIR1"].shape == (64, 64)
+    assert meta["observation_date"] == "2026-08-28"
+    assert "t_mid_time_utc" in meta

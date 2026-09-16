@@ -18,6 +18,7 @@ import socket
 import subprocess
 import sys
 import time
+from typing import Optional
 import urllib.request
 
 
@@ -364,3 +365,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

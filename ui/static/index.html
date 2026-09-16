@@ -1084,6 +1084,12 @@
         <button class="segmented-btn" id="tab-viewer" onclick="setViewMode('viewer')">Live Dissemination</button>
     </div>
 
+    <!-- Operating Mode Badge (Mode A vs Mode B) -->
+    <div class="header-mode-badge" id="top-operating-mode" style="display: flex; align-items: center; gap: 6px; background: rgba(78, 175, 255, 0.1); border: 1px solid var(--accent); color: var(--accent); padding: 3px 9px; border-radius: var(--radius-sm); font-size: 11px; font-family: var(--font-mono); font-weight: 600;">
+        <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);"></span>
+        <span id="top-operating-mode-txt">Mode A: Temporal Interpolation (Reconstruction)</span>
+    </div>
+
     <!-- Live Telemetry Status -->
     <div class="header-status">
         <div class="status-dot"></div>
@@ -1148,11 +1154,11 @@
         <div class="control-section">
             <div class="section-heading">Data Source</div>
             <select id="ctl-datasource" onchange="onDataSourceChange()">
+                <option value="MOSDAC_INSAT3DS" selected>INSAT-3DS Geostationary Imager (Level-1B Operational)</option>
                 <option value="REAL_SATELLITE">Live Satellite (NASA VIIRS / MODIS)</option>
-                <option value="MOSDAC_INSAT3DS">ISRO MOSDAC (INSAT-3DS L1B)</option>
-                <option value="simulation_cyclone" selected>Benchmark: Severe Tropical Cyclone</option>
-                <option value="simulation_cloudburst">Benchmark: Explosive Cloudburst</option>
                 <option value="upload">Custom Ingestion (HDF5 / NetCDF / PNG)</option>
+                <option value="simulation_cyclone">Benchmark: Severe Tropical Cyclone</option>
+                <option value="simulation_cloudburst">Benchmark: Explosive Cloudburst</option>
             </select>
         </div>
 
@@ -1169,7 +1175,7 @@
 
         <div class="control-section">
             <div class="section-heading">Spectral Channel</div>
-            <select id="ctl-band" onchange="refreshOverlays()">
+            <select id="ctl-band" onchange="executeSynthesis()">
                 <option value="TIR-1" selected>TIR-1 (10.8 µm Thermal IR)</option>
                 <option value="WV">WV (6.8 µm Water Vapour)</option>
                 <option value="VIS">VIS (0.65 µm Visible)</option>
@@ -1184,11 +1190,11 @@
             <div class="input-row-2col">
                 <div class="control-group">
                     <span class="control-label">Date</span>
-                    <input type="text" id="ctl-date" value="2026-08-28" placeholder="YYYY-MM-DD">
+                    <input type="text" id="ctl-date" value="2026-08-30" placeholder="YYYY-MM-DD">
                 </div>
                 <div class="control-group">
                     <span class="control-label">UTC Time</span>
-                    <input type="text" id="ctl-time" value="10:00" placeholder="HH:MM">
+                    <input type="text" id="ctl-time" value="23:00" placeholder="HH:MM">
                 </div>
             </div>
         </div>
@@ -1209,19 +1215,19 @@
                 <input type="file" id="file-hidden-t1" style="display:none;" accept=".png,.jpg,.jpeg,.tif,.tiff,.h5,.hdf5,.nc,.nc4" onchange="onFilePicked('t1', this)">
                 <div class="ingest-row">
                     <span class="ingest-badge">T0</span>
-                    <span class="ingest-name" id="name-file-t0">Satellite Feed (Live)</span>
+                    <span class="ingest-name" id="name-file-t0">INSAT-3DS (Level-1B)</span>
                     <button class="ingest-browse-btn" onclick="document.getElementById('file-hidden-t0').click()">Browse</button>
                 </div>
                 <div class="ingest-row">
                     <span class="ingest-badge">T1</span>
-                    <span class="ingest-name" id="name-file-t1">Satellite Feed (Live)</span>
+                    <span class="ingest-name" id="name-file-t1">INSAT-3DS (Level-1B)</span>
                     <button class="ingest-browse-btn" onclick="document.getElementById('file-hidden-t1').click()">Browse</button>
                 </div>
             </div>
         </div>
 
         <button class="btn-primary" id="btn-execute" onclick="executeSynthesis()">Run Frame Synthesis</button>
-        <button class="btn-outline" onclick="toggleMosdacModal()">Configure MOSDAC API</button>
+        <button class="btn-outline" onclick="toggleMosdacModal()">Configure Satellite API</button>
 
         <div class="hairline-divider"></div>
 
@@ -1236,7 +1242,7 @@
 
         <div class="coords-bar">
             <span>Probe</span>
-            <span class="coords-val" id="cursor-latlon">16.74°N, 89.21°E</span>
+            <span class="coords-val" id="cursor-latlon">Hover viewport for Lat/Lon</span>
         </div>
     </div>
 
@@ -1369,24 +1375,28 @@
                 <div class="diag-card-body">
                     <div class="nowcast-content-container">
                         <!-- North Star Hero Metric -->
-                        <div class="hero-metric-card severe" id="card-hero-threat">
+                        <div class="hero-metric-card" id="card-hero-threat">
                             <div class="hero-header-row">
-                                <span class="hero-label">Cloudburst Risk (NETRA)</span>
-                                <span class="hero-badge severe" id="val-badge-threat">⚠️ Severe Alert</span>
+                                <span class="hero-label">Convective Activity Index (NETRA)</span>
+                                <span class="hero-badge nominal" id="val-badge-threat">Evaluating Telemetry...</span>
                             </div>
                             <div class="hero-val-row">
-                                <span class="hero-big-number" id="val-hero-pct">88.5%</span>
-                                <span class="hero-subtext" id="val-hero-sub">dT/dt: -14.8 K/15m · 14 Overshooting Tops</span>
+                                <span class="hero-big-number" id="val-hero-pct">---</span>
+                                <span class="hero-subtext" id="val-hero-sub">Computing updraft cooling tendency...</span>
+                            </div>
+                            <div class="hero-disclaimer" style="font-size: 9.5px; color: var(--text-tertiary); margin-top: 4px; font-family: var(--font-mono);">
+                                Experimental Heuristic Indicator · Not Calibrated Precipitation Probability
                             </div>
                         </div>
 
                         <!-- Structured Telemetry Table (No Text Clipping) -->
                         <table class="telemetry-grid-table">
-                            <tr><td>Cyclone Center</td><td id="val-track-center">16.74°N, 89.21°E</td></tr>
-                            <tr><td>Translation Velocity</td><td id="val-track-speed">18.5 km/h @ 315° NW</td></tr>
-                            <tr><td>Intensity Category</td><td id="val-track-cat">VSCS (135 km/h)</td></tr>
-                            <tr><td>Central Pressure</td><td id="val-track-press">964.0 hPa</td></tr>
-                            <tr><td>Landfall ETA</td><td id="val-landfall-eta">28.5 hrs (Odisha Coast)</td></tr>
+                            <tr><td>Vortex Center</td><td id="val-track-center">Scanning field...</td></tr>
+                            <tr><td>Translation Velocity</td><td id="val-track-speed">Calculating flow...</td></tr>
+                            <tr><td>Intensity Category</td><td id="val-track-cat">Nominal Synoptic Flow</td></tr>
+                            <tr><td>Central Pressure</td><td id="val-track-press">1008.4 hPa (Ambient)</td></tr>
+                            <tr><td>Landfall ETA</td><td id="val-landfall-eta">N/A — No Landfall Threat</td></tr>
+                            <tr><td>Coastal Sector</td><td id="val-landfall-sector">Nominal Inflow</td></tr>
                         </table>
                     </div>
                 </div>
@@ -1396,41 +1406,70 @@
 
     <!-- ─── RIGHT RAIL ─── -->
     <div class="panel-right">
-        <!-- 2x2 Physical Validation Metrics -->
+        <!-- Independent Validation Metrics (Held-Out Ground Truth) -->
         <div class="control-section">
-            <div class="section-heading">Physical Validation Metrics</div>
+            <div class="section-heading" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>Independent Validation Metrics</span>
+                <span id="badge-gt-status" style="font-size:9px; font-weight:600; padding:2px 6px; border-radius:3px; background:rgba(255,255,255,0.06); color:var(--text-secondary); font-family:var(--font-mono);">Held-Out GT: None</span>
+            </div>
             <div class="metrics-2x2">
                 <div class="metric-tile">
                     <div class="metric-tile-header">
                         <span class="metric-tile-name">PSNR</span>
-                        <div class="metric-status-dot"></div>
+                        <div class="metric-status-dot" id="dot-psnr"></div>
                     </div>
-                    <span class="metric-tile-val" id="metric-psnr">36.42</span>
-                    <span class="metric-tile-target">Target ≥ 34.5 dB</span>
+                    <span class="metric-tile-val" id="metric-psnr">N/A</span>
+                    <span class="metric-tile-target" id="sub-psnr">No Independent GT</span>
                 </div>
                 <div class="metric-tile">
                     <div class="metric-tile-header">
                         <span class="metric-tile-name">SSIM</span>
-                        <div class="metric-status-dot"></div>
+                        <div class="metric-status-dot" id="dot-ssim"></div>
                     </div>
-                    <span class="metric-tile-val" id="metric-ssim">0.9620</span>
-                    <span class="metric-tile-target">Target ≥ 0.9400</span>
+                    <span class="metric-tile-val" id="metric-ssim">N/A</span>
+                    <span class="metric-tile-target" id="sub-ssim">No Independent GT</span>
                 </div>
                 <div class="metric-tile">
                     <div class="metric-tile-header">
-                        <span class="metric-tile-name">RMSE</span>
-                        <div class="metric-status-dot"></div>
+                        <span class="metric-tile-name">RMSE (BT)</span>
+                        <div class="metric-status-dot" id="dot-rmse"></div>
                     </div>
-                    <span class="metric-tile-val" id="metric-rmse">3.21 %</span>
-                    <span class="metric-tile-target">Target &lt; 4.0 %</span>
+                    <span class="metric-tile-val" id="metric-rmse">N/A</span>
+                    <span class="metric-tile-target" id="sub-rmse">Physical Kelvin</span>
                 </div>
                 <div class="metric-tile">
                     <div class="metric-tile-header">
-                        <span class="metric-tile-name">Temp Consist</span>
-                        <div class="metric-status-dot"></div>
+                        <span class="metric-tile-name">Baseline Ref</span>
+                        <div class="metric-status-dot" id="dot-tc"></div>
                     </div>
-                    <span class="metric-tile-val" id="metric-tc">0.9710</span>
-                    <span class="metric-tile-target">Target ≥ 0.9000</span>
+                    <span class="metric-tile-val" id="metric-tc" style="font-size:12px;">Linear / Persist</span>
+                    <span class="metric-tile-target" id="sub-tc">Benchmark Baselines</span>
+                </div>
+            </div>
+            <div id="validation-note" style="margin-top:6px; font-size:10px; color:var(--text-tertiary); line-height:1.35; padding:4px 6px; background:rgba(255,255,255,0.02); border-left:2px solid var(--accent); border-radius:2px;">
+                Single-interval interpolation mode lacks intermediate ground-truth observation. Circular evaluation against linear blends is strictly suppressed.
+            </div>
+        </div>
+
+        <!-- Internal Physical Diagnostics (Computable Without GT) -->
+        <div class="control-section">
+            <div class="section-heading">Internal Physical Diagnostics</div>
+            <div style="display:flex; flex-direction:column; gap:4px; font-family:var(--font-mono); font-size:10.5px;">
+                <div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid var(--border-hairline);">
+                    <span style="color:var(--text-secondary);">Flux Conservation:</span>
+                    <span id="diag-flux-val" style="color:var(--text-primary); font-weight:600;">100.0 %</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid var(--border-hairline);">
+                    <span style="color:var(--text-secondary);">Physical BT [180K-330K]:</span>
+                    <span id="diag-bt-compliance" style="color:var(--text-primary); font-weight:600;">100.0 %</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid var(--border-hairline);">
+                    <span style="color:var(--text-secondary);">Mean BT Drift:</span>
+                    <span id="diag-bt-drift" style="color:var(--text-primary); font-weight:600;">+0.00 K</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:3px 0;">
+                    <span style="color:var(--text-secondary);">Fluid Divergence:</span>
+                    <span id="diag-div-val" style="color:var(--text-primary); font-weight:600;">0.000000</span>
                 </div>
             </div>
         </div>
@@ -1476,7 +1515,7 @@
                 </div>
                 <div class="sys-row">
                     <span class="sys-label">Data Stream Source</span>
-                    <span class="sys-val" id="sys-output-txt">ISRO MOSDAC / NASA GIBS</span>
+                    <span class="sys-val" id="sys-output-txt">INSAT-3DS Geostationary Imager / Level-1B</span>
                 </div>
             </div>
         </div>
@@ -1488,7 +1527,7 @@
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <div class="modal-wrap hidden" id="modal-mosdac">
     <div class="modal-box">
-        <div class="modal-title">Configure ISRO MOSDAC API Credentials</div>
+        <div class="modal-title">Configure Satellite Data API Credentials</div>
         <div class="control-group">
             <span class="control-label">MOSDAC Portal Username / Email</span>
             <input type="text" id="cfg-mosdac-user" placeholder="researcher@example.org">
@@ -1522,11 +1561,11 @@ const AppState = {
 const simulationCloudLayerCache = new Map();
 
 const REGION_BOUNDS = {
-    indian_subcontinent: { latNorth: 25.0, latSouth: 5.0, lonWest: 75.0, lonEast: 100.0, name: "Bay of Bengal & Peninsular India" },
-    bay_of_bengal: { latNorth: 22.0, latSouth: 8.0, lonWest: 80.0, lonEast: 95.0, name: "Bay of Bengal Cyclone Basin" },
-    arabian_sea: { latNorth: 24.0, latSouth: 8.0, lonWest: 60.0, lonEast: 77.0, name: "Arabian Sea Inflow" },
-    western_ghats: { latNorth: 20.0, latSouth: 8.5, lonWest: 72.5, lonEast: 77.5, name: "Western Ghats Orographic Zone" },
-    himalayan_foothills: { latNorth: 33.0, latSouth: 26.0, lonWest: 74.0, lonEast: 90.0, name: "Himalayan Cloudburst Corridor" },
+    indian_subcontinent: { latNorth: 35.51, latSouth: 4.97, lonWest: 60.32, lonEast: 105.02, name: "Indian Subcontinent & Ocean" },
+    bay_of_bengal: { latNorth: 22.13, latSouth: 7.97, lonWest: 79.87, lonEast: 96.06, name: "Bay of Bengal Cyclone Basin" },
+    arabian_sea: { latNorth: 24.41, latSouth: 7.91, lonWest: 57.57, lonEast: 77.44, name: "Arabian Sea Inflow" },
+    western_ghats: { latNorth: 20.04, latSouth: 8.49, lonWest: 71.92, lonEast: 77.76, name: "Western Ghats Orographic Zone" },
+    himalayan_foothills: { latNorth: 33.06, latSouth: 25.96, lonWest: 73.34, lonEast: 90.65, name: "Himalayan Cloudburst Corridor" },
 };
 const GEO_COORDS = { ...REGION_BOUNDS.indian_subcontinent };
 const simulationMaps = {};
@@ -1758,15 +1797,7 @@ function setSimulationMapMode(enabled) {
     });
 }
 
-const STORM_TRACK_POINTS = [
-    [15.2, 91.5], [15.8, 90.6], [16.74, 89.21], [17.8, 87.9], [18.9, 86.8], [20.1, 85.9], [21.4, 85.2]
-];
-
-const CONVECTIVE_CELLS = [
-    { lat: 17.1, lon: 89.6, r: 24, prob: 92, rate: -16.2 },
-    { lat: 15.9, lon: 88.4, r: 18, prob: 78, rate: -11.5 },
-    { lat: 18.2, lon: 87.3, r: 14, prob: 64, rate: -8.7 },
-];
+// Dynamic overlays populated directly from Level-1B satellite telemetry
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /*                               FILE INGESTION                              */
@@ -1850,8 +1881,9 @@ async function executeSynthesis() {
     try {
         const src = document.getElementById('ctl-datasource').value;
         const regKey = document.getElementById('ctl-region').value;
-        const dateStr = document.getElementById('ctl-date').value || '2026-08-28';
-        const timeStr = document.getElementById('ctl-time').value || '10:00';
+        const bandKey = document.getElementById('ctl-band')?.value || 'composite';
+        const dateStr = document.getElementById('ctl-date').value || '2026-08-30';
+        const timeStr = document.getElementById('ctl-time').value || '23:00';
         const steps = parseInt(document.getElementById('ctl-procmode').value, 10);
         let resultData;
 
@@ -1860,6 +1892,7 @@ async function executeSynthesis() {
             fd.append('file_t0', AppState.uploadedFiles.t0);
             fd.append('file_t1', AppState.uploadedFiles.t1);
             fd.append('cadence_steps', steps);
+            fd.append('channel', bandKey);
             const res = await fetch('/v1/interpolate/upload', { method: 'POST', body: fd });
             resultData = await res.json();
         } else {
@@ -1870,6 +1903,7 @@ async function executeSynthesis() {
                 region: regKey,
                 cadence_steps: steps,
                 grid_size: 512,
+                channel: bandKey,
             };
             if (src.startsWith('simulation')) {
                 payload.scenario = src.includes('cloudburst') ? 'cloudburst' : 'cyclone';
@@ -1884,7 +1918,13 @@ async function executeSynthesis() {
         }
 
         AppState.data = resultData;
-        AppState.totalFramesCount = resultData.synthesized_frames.length + 2;
+        if (resultData.geo_bounds) {
+            GEO_COORDS.latNorth = resultData.geo_bounds.latNorth ?? resultData.geo_bounds.lat_north ?? GEO_COORDS.latNorth;
+            GEO_COORDS.latSouth = resultData.geo_bounds.latSouth ?? resultData.geo_bounds.lat_south ?? GEO_COORDS.latSouth;
+            GEO_COORDS.lonWest = resultData.geo_bounds.lonWest ?? resultData.geo_bounds.lon_west ?? GEO_COORDS.lonWest;
+            GEO_COORDS.lonEast = resultData.geo_bounds.lonEast ?? resultData.geo_bounds.lon_east ?? GEO_COORDS.lonEast;
+        }
+        AppState.totalFramesCount = (resultData.synthesized_frames || []).length + 2;
         AppState.selectedFrameIdx = Math.floor(AppState.totalFramesCount / 2);
 
         if (resultData.flow_visualization_base64) {
@@ -1896,7 +1936,7 @@ async function executeSynthesis() {
         renderViewports();
         buildTimelineStrip();
         selectTimelineFrame(AppState.selectedFrameIdx);
-        updateTelemetryMetrics(resultData.metrics);
+        updateTelemetryMetrics(resultData.metrics, resultData);
         updateNowcastingTelemetry(resultData);
         updateSystemDiagnostics(resultData);
         scheduleDiagnosticsRender();
@@ -2120,20 +2160,28 @@ function geoToPixel(lat, lon, width, height) {
 }
 
 function drawGraticuleGrid(ctx, w, h) {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
     ctx.lineWidth = 0.5;
 
-    for (let lat = GEO_COORDS.latSouth; lat <= GEO_COORDS.latNorth; lat += 5) {
+    const latMin = Math.ceil(GEO_COORDS.latSouth / 5) * 5;
+    const latMax = Math.floor(GEO_COORDS.latNorth / 5) * 5;
+    for (let lat = latMin; lat <= latMax; lat += 5) {
         const [, y] = geoToPixel(lat, GEO_COORDS.lonWest, w, h);
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
     }
-    for (let lon = GEO_COORDS.lonWest; lon <= GEO_COORDS.lonEast; lon += 5) {
+    const lonMin = Math.ceil(GEO_COORDS.lonWest / 5) * 5;
+    const lonMax = Math.floor(GEO_COORDS.lonEast / 5) * 5;
+    for (let lon = lonMin; lon <= lonMax; lon += 5) {
         const [x] = geoToPixel(GEO_COORDS.latNorth, lon, w, h);
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
     }
 }
 
 function drawSubcontinentCoastline(ctx, w, h) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, w, h);
+    ctx.clip();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.70)';
     ctx.lineWidth = 0.8;
 
@@ -2157,11 +2205,12 @@ function drawSubcontinentCoastline(ctx, w, h) {
             }
         });
     });
+    ctx.restore();
 }
 
 function drawStormTrackAndCone(ctx, w, h) {
     const track = AppState.data?.storm_track;
-    if (!track) return;
+    if (!track || !track.is_active_cyclone) return;
     const pts = (track.forecast_waypoints || []).map(p => geoToPixel(p.lat, p.lon, w, h));
     if (pts.length < 2) return;
 
@@ -2199,27 +2248,36 @@ function drawStormTrackAndCone(ctx, w, h) {
 function drawCloudburstThreatZones(ctx, w, h) {
     const clusters = AppState.data?.convective_nowcast?.active_threat_clusters || [];
     clusters.forEach(cell => {
-        const [cx, cy] = geoToPixel(cell.centroid_lat, cell.centroid_lon, w, h);
         const bounds = cell.bounding_box;
-        const [x0, y0] = geoToPixel(bounds.min_lat, bounds.min_lon, w, h);
-        const [x1, y1] = geoToPixel(bounds.max_lat, bounds.max_lon, w, h);
+        if (!bounds) return;
+        const [x0, y0] = geoToPixel(bounds.max_lat, bounds.min_lon, w, h);
+        const [x1, y1] = geoToPixel(bounds.min_lat, bounds.max_lon, w, h);
+
+        const rx = Math.min(x0, x1);
+        const ry = Math.min(y0, y1);
+        const rw = Math.max(1, Math.abs(x1 - x0));
+        const rh = Math.max(1, Math.abs(y1 - y0));
+
+        ctx.fillStyle = 'rgba(229, 72, 77, 0.15)';
+        ctx.fillRect(rx, ry, rw, rh);
         ctx.strokeStyle = '#E5484D';
         ctx.lineWidth = 1.2;
-        ctx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+        ctx.strokeRect(rx, ry, rw, rh);
 
-        ctx.font = '8px "JetBrains Mono"';
-        ctx.fillStyle = '#E5484D';
-        ctx.fillText(`NETRA ${cell.cloudburst_probability_pct}%`, cx + 4, cy - 4);
+        ctx.font = '8px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#FF5252';
+        const label = `NETRA ${cell.cloudburst_probability_pct}%`;
+        ctx.fillText(label, rx + 4, ry > 12 ? ry - 3 : ry + rh - 3);
     });
 }
 
 function drawBorderCoordinateLabels(ctx, w, h) {
-    ctx.font = '7.5px "JetBrains Mono"';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.fillText(`${GEO_COORDS.latNorth}°N`, 4, 10);
-    ctx.fillText(`${GEO_COORDS.latSouth}°N`, 4, h - 4);
-    ctx.fillText(`${GEO_COORDS.lonWest}°E`, 12, h - 4);
-    ctx.fillText(`${GEO_COORDS.lonEast}°E`, w - 32, h - 4);
+    ctx.font = '7.5px "JetBrains Mono", monospace';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.fillText(`${Number(GEO_COORDS.latNorth).toFixed(1)}°N`, 4, 10);
+    ctx.fillText(`${Number(GEO_COORDS.latSouth).toFixed(1)}°N`, 4, h - 4);
+    ctx.fillText(`${Number(GEO_COORDS.lonWest).toFixed(1)}°E`, 12, h - 4);
+    ctx.fillText(`${Number(GEO_COORDS.lonEast).toFixed(1)}°E`, w - 36, h - 4);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
@@ -2904,12 +2962,73 @@ function handleViewportHover(evt, container) {
     document.getElementById('cursor-latlon').textContent = `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
 }
 
-function updateTelemetryMetrics(metrics) {
-    const format = (value, suffix = '', digits = 2) => Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : 'N/A';
-    document.getElementById('metric-psnr').textContent = format(metrics?.psnr_db, ' dB');
-    document.getElementById('metric-ssim').textContent = format(metrics?.ssim, '', 4);
-    document.getElementById('metric-rmse').textContent = format(metrics?.rmse_pct, ' %');
-    document.getElementById('metric-tc').textContent = format(metrics?.temporal_consistency, '', 4);
+function updateTelemetryMetrics(metrics, data) {
+    const format = (value, suffix = '', digits = 2) => {
+        const num = Number(value);
+        return (value !== null && value !== undefined && Number.isFinite(num)) ? `${num.toFixed(digits)}${suffix}` : 'N/A';
+    };
+
+    const hasGt = Boolean(metrics?.has_ground_truth);
+    const gtBadge = document.getElementById('badge-gt-status');
+    const valNote = document.getElementById('validation-note');
+
+    if (hasGt) {
+        if (gtBadge) {
+            gtBadge.textContent = 'Held-Out GT: Verified';
+            gtBadge.style.color = 'var(--accent)';
+            gtBadge.style.background = 'rgba(78, 175, 255, 0.15)';
+        }
+        document.getElementById('metric-psnr').textContent = format(metrics?.psnr_db, ' dB');
+        document.getElementById('metric-ssim').textContent = format(metrics?.ssim, '', 4);
+        document.getElementById('metric-rmse').textContent = format(metrics?.rmse_k, ' K');
+
+        const subPsnr = document.getElementById('sub-psnr');
+        const subSsim = document.getElementById('sub-ssim');
+        const subRmse = document.getElementById('sub-rmse');
+        const subTc = document.getElementById('sub-tc');
+
+        if (subPsnr) subPsnr.textContent = metrics?.baselines?.linear_blend ? `Lin: ${metrics.baselines.linear_blend.psnr_db} dB` : 'Evaluated vs GT';
+        if (subSsim) subSsim.textContent = metrics?.baselines?.linear_blend ? `Lin: ${metrics.baselines.linear_blend.ssim}` : 'Evaluated vs GT';
+        if (subRmse) subRmse.textContent = 'Physical BT RMSE (K)';
+        if (subTc) subTc.textContent = metrics?.baselines?.persistence ? `Pers: ${metrics.baselines.persistence.psnr_db} dB` : 'Benchmark Baseline';
+
+        if (valNote) valNote.textContent = data?.evaluation_protocol || 'Evaluated against independent held-out observation frame.';
+    } else {
+        if (gtBadge) {
+            gtBadge.textContent = 'Held-Out GT: None';
+            gtBadge.style.color = 'var(--text-secondary)';
+            gtBadge.style.background = 'rgba(255, 255, 255, 0.06)';
+        }
+        document.getElementById('metric-psnr').textContent = 'N/A';
+        document.getElementById('metric-ssim').textContent = 'N/A';
+        document.getElementById('metric-rmse').textContent = 'N/A';
+        document.getElementById('metric-tc').textContent = 'Benchmark Suppressed';
+
+        const subPsnr = document.getElementById('sub-psnr');
+        const subSsim = document.getElementById('sub-ssim');
+        const subRmse = document.getElementById('sub-rmse');
+        const subTc = document.getElementById('sub-tc');
+        if (subPsnr) subPsnr.textContent = 'No Independent GT';
+        if (subSsim) subSsim.textContent = 'No Independent GT';
+        if (subRmse) subRmse.textContent = 'Physical Kelvin';
+        if (subTc) subTc.textContent = 'No Ground Truth';
+
+        if (valNote) valNote.textContent = data?.validation_status || 'Single-interval interpolation mode lacks intermediate ground-truth observation. Circular evaluation against linear blends is strictly suppressed.';
+    }
+
+    // Update Internal Physical Diagnostics
+    const fluxEl = document.getElementById('diag-flux-val');
+    const compEl = document.getElementById('diag-bt-compliance');
+    const driftEl = document.getElementById('diag-bt-drift');
+    const divEl = document.getElementById('diag-div-val');
+
+    if (fluxEl) fluxEl.textContent = format(metrics?.radiance_conservation_pct, ' %');
+    if (compEl) compEl.textContent = format(metrics?.physical_bt_compliance_pct, ' %');
+    if (driftEl) {
+        const d = Number(metrics?.mean_bt_drift_k);
+        driftEl.textContent = Number.isFinite(d) ? `${d >= 0 ? '+' : ''}${d.toFixed(2)} K` : '0.00 K';
+    }
+    if (divEl) divEl.textContent = format(metrics?.fluid_divergence, '', 6);
 }
 
 function updateNowcastingTelemetry(data) {
@@ -2917,17 +3036,88 @@ function updateNowcastingTelemetry(data) {
     const nowcast = data?.convective_nowcast;
 
     if (track) {
-        document.getElementById('val-track-center').textContent = `${track.current_center_lat}°N, ${track.current_center_lon}°E`;
-        document.getElementById('val-track-speed').textContent = `${track.translation_speed_kmh} km/h @ ${track.heading_deg}° NW`;
-        document.getElementById('val-track-cat').textContent = `${track.intensity_category} (${track.max_winds_kmh} km/h)`;
-        document.getElementById('val-track-press').textContent = `${track.central_pressure_hpa} hPa`;
-        if (track.landfall_estimate) {
-            document.getElementById('val-landfall-eta').textContent = `${track.landfall_estimate.estimated_eta_hours} hrs (${track.landfall_estimate.estimated_region})`;
+        if (track.is_active_cyclone) {
+            document.getElementById('val-track-center').textContent = `${track.current_center_lat}°N, ${track.current_center_lon}°E`;
+            document.getElementById('val-track-speed').textContent = `${track.translation_speed_kmh} km/h @ ${track.heading_deg}° NW`;
+            document.getElementById('val-track-cat').textContent = `${track.intensity_category} (${track.max_winds_kmh} km/h)`;
+            document.getElementById('val-track-press').textContent = `${track.central_pressure_hpa} hPa`;
+            const sectorEl = document.getElementById('val-landfall-sector');
+            if (track.landfall_estimate) {
+                const le = track.landfall_estimate;
+                let etaStr = `${le.estimated_eta_hours} hrs`;
+                if (le.landfall_lat && le.landfall_lon) {
+                    etaStr += ` @ ${le.landfall_lat}°N, ${le.landfall_lon}°E`;
+                }
+                document.getElementById('val-landfall-eta').textContent = etaStr;
+                if (sectorEl) {
+                    let secStr = le.estimated_region;
+                    if (le.nearest_landmarks && !secStr.includes(le.nearest_landmarks)) {
+                        secStr += ` (${le.nearest_landmarks})`;
+                    }
+                    if (le.estimated_intensity_at_landfall) {
+                        secStr += ` · ${le.estimated_intensity_at_landfall}`;
+                    }
+                    sectorEl.textContent = secStr;
+                }
+            } else {
+                document.getElementById('val-landfall-eta').textContent = 'Open Sea / No Coastline Threat';
+                if (sectorEl) sectorEl.textContent = 'Maritime Waters';
+            }
+        } else {
+            document.getElementById('val-track-center').textContent = 'Nominal / No Vortex';
+            document.getElementById('val-track-speed').textContent = `${track.translation_speed_kmh} km/h (Atmospheric Flow)`;
+            document.getElementById('val-track-cat').textContent = 'Nominal Synoptic Flow (No Cyclone)';
+            document.getElementById('val-track-press').textContent = `${track.central_pressure_hpa} hPa (Ambient)`;
+            document.getElementById('val-landfall-eta').textContent = 'N/A — No Landfall Threat';
+            const sectorEl = document.getElementById('val-landfall-sector');
+            if (sectorEl) sectorEl.textContent = 'Nominal (No Landfall Threat)';
         }
     }
+
     if (nowcast) {
-        document.getElementById('val-hero-pct').textContent = `${nowcast.extreme_rain_probability_pct}%`;
-        document.getElementById('val-hero-sub').textContent = `dT/dt: -${nowcast.max_cooling_rate_k_15min} K/15m · ${nowcast.overshooting_tops_detected} Overshooting Tops`;
+        const cai = nowcast.convective_activity_index !== undefined ? nowcast.convective_activity_index : (nowcast.extreme_rain_probability_pct || 0.0);
+        const coolingTendency = nowcast.cloud_top_bt_tendency_k_15m !== undefined ? nowcast.cloud_top_bt_tendency_k_15m : -(nowcast.max_cooling_rate_k_15min || 0.0);
+        const otCount = nowcast.experimental_ot_candidates_count !== undefined ? nowcast.experimental_ot_candidates_count : (nowcast.overshooting_tops_detected || 0);
+
+        document.getElementById('val-hero-pct').textContent = `${Math.round(cai)} / 100`;
+        document.getElementById('val-hero-sub').textContent = `dT_B/dt: ${coolingTendency.toFixed(1)} K/15m · ${otCount} Experimental OT Proxies`;
+
+        const badge = document.getElementById('val-badge-threat');
+        const card = document.getElementById('card-hero-threat');
+        if (badge && card) {
+            card.classList.remove('severe', 'elevated', 'nominal');
+            badge.classList.remove('severe', 'elevated', 'nominal');
+            if (cai >= 75.0 || nowcast.overall_convective_level === 'SEVERE_CONVECTIVE_UPDRAFT') {
+                badge.textContent = '⚠️ Severe Updraft';
+                badge.classList.add('severe');
+                card.classList.add('severe');
+            } else if (cai >= 50.0 || nowcast.overall_convective_level === 'ELEVATED_CONVECTIVE_ACTIVITY') {
+                badge.textContent = '⚡ Elevated Convection';
+                badge.classList.add('elevated');
+                card.classList.add('elevated');
+            } else if (cai >= 25.0) {
+                badge.textContent = '☁️ Moderate Convection';
+                badge.classList.add('elevated');
+                card.classList.add('elevated');
+            } else {
+                badge.textContent = '✓ Nominal Stability';
+                badge.classList.add('nominal');
+                card.classList.add('nominal');
+            }
+        }
+    }
+
+    if (data?.source_metadata?.source) {
+        const srcEl = document.getElementById('sys-output-txt');
+        if (srcEl) srcEl.textContent = data.source_metadata.source;
+    }
+    if (data?.operating_mode) {
+        const modeEl = document.getElementById('top-operating-mode-txt');
+        if (modeEl) {
+            modeEl.textContent = data.operating_mode === 'TEMPORAL_INTERPOLATION'
+                ? 'Mode A: Temporal Interpolation (Reconstruction)'
+                : 'Mode B: Kinematic Forecast (Nowcast)';
+        }
     }
 }
 

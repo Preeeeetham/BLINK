@@ -34,9 +34,10 @@ def preprocess_json(raw_json):
     return fixed_json
 
 def load_config(): 
-    """Loads and validates configuration from config.json."""
+    """Loads and validates configuration from config.local.json or config.json."""
+    config_filename = "config.local.json" if os.path.exists("config.local.json") else "config.json"
     try:
-        with open("config.json", "r") as file:
+        with open(config_filename, "r", encoding="utf-8") as file:
             raw_config = file.read()
         
         try:
@@ -47,42 +48,43 @@ def load_config():
             try:
                 config = json.loads(fixed_json)
             except json.JSONDecodeError:
-                print("[ERROR] Invalid JSON format in 'config.json'! Please correct it and Try Again.")
+                print(f"[ERROR] Invalid JSON format in '{config_filename}'! Please correct it and Try Again.")
                 sys.exit(1)
 
         # Validate required fields
         required_fields = ["user_credentials", "search_parameters"]
         for field in required_fields:
             if field not in config:
-                raise ValueError(f"Missing Required Config Section: {field} inside 'config.json'")
+                raise ValueError(f"Missing Required Config Section: {field} inside '{config_filename}'")
             
         # Sets Current Directory for Download if 'download_settings' not specified
         if "download_settings" not in config:
-            print("\n[Warning]: 'download_settings' not set in 'config.json'. Downloading in the Current Directory..")
+            print(f"\n[Warning]: 'download_settings' not set in '{config_filename}'. Downloading in the Current Directory..")
             config["download_settings"] = {
                 "download_path": ""
             }
         return config
     
     except FileNotFoundError as e:
-        print("[ERROR] 'config.json' Not Found!")
+        print(f"[ERROR] Neither 'config.local.json' nor 'config.json' was Found!")
         exit(1)
         
     except ValueError as e:
-        print(f"[ERROR] in 'config.json': {e}")
+        print(f"[ERROR] in configuration: {e}")
         exit(1)
 
 config_file = load_config()
 
-# Fetching Information from 'config.json'
-user_creds = config_file['user_credentials']
-username = user_creds.get("username/email", "")
-password = user_creds.get("password", "")
+# Fetching Information from configuration with environment variable override
+user_creds = config_file.get('user_credentials', {})
+username = os.environ.get("MOSDAC_USERNAME") or user_creds.get("username/email", "")
+password = os.environ.get("MOSDAC_PASSWORD") or user_creds.get("password", "")
 
-download_settings = config_file['download_settings']
+download_settings = config_file.get('download_settings', {})
 
-# Retrives Download Path from 'config.json'
-download_path = download_settings.get("download_path").replace("\\", "/") or os.path.join(os.getcwd(), "MOSDAC Data Download")
+# Retrieves Download Path from env var or config
+env_dl_path = os.environ.get("MOSDAC_DOWNLOAD_PATH")
+download_path = (env_dl_path or download_settings.get("download_path", "")).replace("\\", "/") or os.path.join(os.getcwd(), "MOSDAC Data Download")
 
 use_date_structure = download_settings.get("organize_by_date", False)
 skip_user_input = download_settings.get("skip_user_input", False)
@@ -447,216 +449,142 @@ def get_user_input():
         sys.exit(1)
 
 def download_data(bearer_token, record_id, identifier, prod_date, counter, total_files): 
-    """Download data using the record ID and collection."""
-    # Creates Download Path if Not Already Exist
+    """Download data using the record ID and collection with resumable chunk streaming."""
     os.makedirs(download_path, exist_ok=True)
 
-    headers = {"Authorization": f"Bearer {bearer_token}"}
-    params = {"id": record_id}
+    if use_date_structure:
+        dataset_download_path = os.path.join(download_path, datasetId)
+        if prod_date is None:
+            folder_structure = dataset_download_path
+        else:
+            date_obj = datetime.strptime(prod_date, "%Y-%m-%dT%H:%M:%SZ")
+            year = date_obj.strftime("%Y")
+            day = date_obj.strftime("%d")
+            month_abbr = date_obj.strftime("%b").upper()
+            day_month = f"{day}{month_abbr}"
+            folder_structure = os.path.join(dataset_download_path, year, day_month)
+    else:
+        folder_structure = download_path
 
-    tmp_file_path = '' 
+    os.makedirs(folder_structure, exist_ok=True) 
+    file_path = os.path.join(folder_structure, identifier)
+    tmp_file_path = file_path + ".part"
 
-    while True:
+    if os.path.exists(file_path):
+        print(f"\n[INFO] {identifier} Already Exists in {folder_structure}. Skipping Download..")
+        return file_path
 
-        RETRY_DELAYS = [10, 20, 30, 60, 90, 120]
+    MAX_RETRIES = 10
+    session = requests.Session()
 
-        for attempt, delay in enumerate(RETRY_DELAYS + [None]):
-            try:
-                if use_date_structure: # Can be Put under fetch_and_download_data() for Single Time Use..
-                    # Creates Dataset Specific Path in Download Directory
-                    dataset_download_path = os.path.join(download_path, datasetId)
-                    if prod_date == None:
-                        print(f"\n[WARNING] File: '{identifier}' does not support 'organize_by_date' and hence, will be Downloaded inside the DatasetID directory instead..")
-                        folder_structure = dataset_download_path
-                    
-                    else:
-                        date_obj = datetime.strptime(prod_date, "%Y-%m-%dT%H:%M:%SZ")
+    for attempt in range(1, MAX_RETRIES + 1):
+        existing_bytes = os.path.getsize(tmp_file_path) if os.path.exists(tmp_file_path) else 0
 
-                        year = date_obj.strftime("%Y")
-                        day = date_obj.strftime("%d")
-                        month_abbr = date_obj.strftime("%b").upper()
+        headers = {
+            "Authorization": f"Bearer {bearer_token}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept-Encoding": "identity",
+        }
+        params = {"id": record_id}
 
-                        # Creates 'Archival' Date-Month Strcuture (eg: "09AUG")
-                        day_month = f"{day}{month_abbr}"
+        if existing_bytes > 0:
+            headers["Range"] = f"bytes={existing_bytes}-"
 
-                        # Creates Folder Strucutre (eg: 2025/09AUG)
-                        folder_structure = os.path.join(dataset_download_path, year, day_month)
-                else:
-                    folder_structure = download_path
+        try:
+            response = session.get(download_url, headers=headers, params=params, stream=True, timeout=90)
 
-                os.makedirs(folder_structure, exist_ok=True) 
+            if response.status_code == 400:
+                resp = response.json()
+                print(f"\n[ERROR] Validation Error: {resp.get('error', '')}\n")
+                return None
+            
+            if response.status_code == 401:
+                return "Invalid/Expired Token"
+            
+            if response.status_code == 404:
+                return "NOT_RELEASED"
+            
+            if response.status_code == 429:
+                print("\n[INFO] Rate limit reached. Waiting 20 seconds...")
+                time.sleep(20)
+                continue
 
-                file_path = os.path.join(folder_structure, identifier)
-
-                # Checks if File Already Exists
-                if os.path.exists(file_path):
-                    print(f"\n[INFO] {identifier} Already Exists in {folder_structure}. Skipping Download..")
-                    return None
-
-                response = requests.get(download_url, headers=headers, params=params, stream=True, timeout=5)
-
-                if response.status_code == 400:
-                    resp = response.json()
-                    err_msg = resp['error']
-                    print(f"\n[ERROR] Validation Error: {err_msg}\n")
-                    if generate_logs:
-                        logger.error(f"\nValidation Error encountered in 'download_data' method.\nError Details: {err_msg}")
-                    return None
-                
-                if response.status_code == 401:
-                    error_data = response.json()
-                    if error_data.get("code") == "NO_ACCESS_TOKEN":
-                        return "Access Token Not Found. Please Login and Try Again."
-                    elif error_data.get("code") == "INVALID_TOKEN":
-                        return "Invalid/Expired Token"
-                    
-                if response.status_code == 404:
-                    error_data = response.json()
-                    if error_data.get("code") == "NOT_RELEASED":
-                        return error_data.get("code")
-                
-                # If Rate Limit Reached, Error Handling According to the Err. Type
-                if response.status_code == 429:
-                    resp = response.json()
-                    err_msg = resp['message']
-                    err_type = resp['type']
-
-                    if err_type == 'minute_limit':
-                        print(f"\n{err_msg}")
-                        time.sleep(20)
-                        continue
-                    elif err_type == 'daily_limit':
-                        print(f"\n{err_msg}")
-                        logout()
-                        sys.exit(1) 
-                            
-                response.raise_for_status()
-                
-                # Get File Size 
-                total_size = int(response.headers.get('Content-Length', 0))
-                content_disposition = response.headers.get('Content-Disposition')
-
-                # Extracts Filename 
-                if content_disposition and 'filename=' in content_disposition: 
-                    filename = identifier
-                    # filename = os.path.splitext(filename)[0]
-                else:
-                    print(f"\n[WARNING] {identifier}: File Not Available on the Server. Skipping File..") 
-                    if generate_logs:
-                        logger.warning(f"\n[WARNING] {identifier}: This file is Not Available on the Server, and hence was Skipped during the Download.")
-                    return None
-
-                # os.makedirs(folder_structure, exist_ok=True)
-
-                file_path = os.path.join(folder_structure, filename)
-                tmp_file_path = file_path + ".part" # Temporary File
-
-                # Checks if File Already Exists
-                # if os.path.exists(file_path):
-                #     print(f"\n[INFO] {filename} Already Exists in {folder_structure}. Skipping Download..")
-                #     return None
-                
-                # If a previous Incomplete Download Exist, Delete it First
+            if response.status_code == 416:
+                # Requested range not satisfiable -> file already fully downloaded or invalid range
                 if os.path.exists(tmp_file_path):
-                    print(f"\n[INFO] Incomplete Download Found. Deleting and Restarting: {filename}")
-                    os.remove(tmp_file_path)
-                
-                file_size = f"{total_size / (1024 * 1024):.2f} MB"
+                    os.rename(tmp_file_path, file_path)
+                    return file_path
+                existing_bytes = 0
 
-                # Displays File Size
-                print(f"\n[{counter}/{total_files}] | Downloading: {filename} | File Size: {file_size}")
-                
-                with open(tmp_file_path, "wb") as file:
-                    if HAS_TQDM:
-                        try:
-                            tqdm_kwargs = {}
+            response.raise_for_status()
 
-                            if sys.platform == "win32":
-                                tqdm_kwargs = {"ascii": True}
-                            
-                            start_time = time.time()
-                            
-                            with tqdm(
-                                desc="Progress", total=total_size, unit='B', unit_scale=True, unit_divisor=1024, smoothing=0.3, miniters=1, mininterval=0.1, dynamic_ncols=True, **tqdm_kwargs
-                            ) as bar:
-                                bar.start_t = start_time
+            is_resumed = (response.status_code == 206)
+            content_length = int(response.headers.get('Content-Length', 0))
+            total_size = (existing_bytes + content_length) if is_resumed else content_length
+            file_mode = "ab" if (is_resumed and existing_bytes > 0) else "wb"
+            initial_progress = existing_bytes if is_resumed else 0
 
-                                for chunk in response.iter_content(chunk_size=1048576): 
-                                    if chunk:
-                                        file.write(chunk)
-                                        bar.update(len(chunk))
-                                        bar.refresh()
-                                
-                                bar.close()
+            file_size_mb = f"{total_size / (1024 * 1024):.2f} MB" if total_size > 0 else "Unknown Size"
+            if attempt == 1 or not is_resumed:
+                print(f"\n[{counter}/{total_files}] | Downloading: {identifier} | File Size: {file_size_mb}")
+            else:
+                print(f"\n[INFO] Resuming {identifier} from {existing_bytes / (1024*1024):.2f} MB / {file_size_mb} (Attempt {attempt}/{MAX_RETRIES})...")
 
-                        except PermissionError:
-                            print(f"\n[ERROR]: No Permission to Write to {download_path}. Please Check File Permissions.")
-                            print("Stopping Further Downloads..\n")
-                            return "Permission Denied"          
-                        except Exception as e:
-                            print("[ERROR] Error Encountered in download_data():", e)
-                            if generate_logs:
-                                logger.error("An error was encountered while Downloading ")
-
-                    else:                     
-                        # Alternative for Download Progress - w/o TQDM
-                        try:
-                            download_size = 0
-                            chunk_size = 1048576 
-                            bar_length = 82
-
-                            for chunk in response.iter_content(chunk_size=chunk_size):
+            download_interrupted = False
+            try:
+                with open(tmp_file_path, file_mode) as file:
+                    if HAS_TQDM and total_size > 0:
+                        tqdm_kwargs = {"ascii": True} if sys.platform == "win32" else {}
+                        with tqdm(
+                            desc="Progress",
+                            total=total_size,
+                            initial=initial_progress,
+                            unit='B',
+                            unit_scale=True,
+                            unit_divisor=1024,
+                            smoothing=0.3,
+                            dynamic_ncols=True,
+                            **tqdm_kwargs
+                        ) as bar:
+                            for chunk in response.iter_content(chunk_size=1048576):
                                 if chunk:
                                     file.write(chunk)
-                                    download_size += len(chunk)
+                                    bar.update(len(chunk))
+                    else:
+                        for chunk in response.iter_content(chunk_size=1048576):
+                            if chunk:
+                                file.write(chunk)
+            except Exception as stream_err:
+                print(f"\n[WARNING] Stream interrupted ({stream_err}). Will resume in 5 seconds...")
+                download_interrupted = True
 
-                                    # Prints Progress in Percentage
-                                    percent_done = (download_size / total_size)
-                                    num_bars = int(bar_length * percent_done)
-                                    bar_str=f"[{'#' * num_bars}{'.' * (bar_length - num_bars)}] {percent_done * 100:.1f}%"
+            if download_interrupted:
+                time.sleep(5)
+                continue
 
-                                    sys.stdout.write(f"\r{bar_str}")
-                                    sys.stdout.flush()
-                            print()
-                        except PermissionError:
-                            print(f"\n[ERROR]: No Permission to Write to {download_path}. Please Check and Update Directory Permissions.")
-                            if generate_logs:
-                                logger.error(f"\nPermission Error encountered: No Permission to Write to {download_path}, hence could not Proceed with Download.\nPlease Check and Update the Permission for Writing files inside: {download_path}")
-                            print("Stopping Further Downloads..\n")
-                            return "Permission Denied"
+            current_downloaded = os.path.getsize(tmp_file_path) if os.path.exists(tmp_file_path) else 0
+            if total_size > 0 and current_downloaded < total_size:
+                print(f"\n[WARNING] Incomplete download ({current_downloaded}/{total_size} bytes). Resuming...")
+                time.sleep(3)
+                continue
 
-                # Renames Temp File to Final File after Successful Download
+            # Full download complete
+            if os.path.exists(tmp_file_path):
                 os.rename(tmp_file_path, file_path)
-                
+                print(f"\n[SUCCESS] Completed download: {identifier}")
                 return file_path
 
-            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-                print(f"\n[WARNING] Network Error encountered: Please check your Internet connection and reconnect if needed.\nError Details: {e}")
-                if delay is None:
-                    print(f"\n[ERROR] Download Stopped after Multiple Attempts due to Network Error. Please check your Internet connection and Try Again.")
-                    if generate_logs:
-                        logger.error(f"\nDownload was Stopped after Multiple Attempts due to the encountered Network Error. Please check your Internet connection and Try Again.\n")
-                    return None
-                print(f"\n[INFO] Retrying in {delay} seconds...")
-                if tmp_file_path and os.path.exists(tmp_file_path):
-                    os.remove(tmp_file_path)
-                time.sleep(delay)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as net_err:
+            print(f"\n[WARNING] Network timeout/drop ({net_err}). Retrying in 5 seconds (Attempt {attempt}/{MAX_RETRIES})...")
+            time.sleep(5)
+            continue
+        except Exception as gen_err:
+            print(f"\n[ERROR] Unexpected error in download: {gen_err}")
+            time.sleep(5)
+            continue
 
-            except requests.exceptions.RequestException as e:
-                error_message = str(e)
-                
-                if "NOT FOUND for url" in error_message:
-                    print(f"\n[WARNING] {identifier}: File Not Available on the Server. Skipping File..")
-                    if generate_logs:
-                        logger.warning(f"\n[WARNING] {identifier}: This file is Not Available on the Server, and hence was Skipped during the Download.")
-                    return None
-                elif os.path.exists(tmp_file_path):
-                    print(f"\n[WARNING] Download was Interrupted due to Connection Loss. Resuming from the last point..")
-                else:
-                    print(f"\n[ERROR] Error downloading data.", e)
-                    if generate_logs:
-                        logger.error("[ERROR] Error encountered in 'download()' method.\nError Details: ", exc_info=True)
-                    return None
+    print(f"\n[ERROR] Failed to download {identifier} after {MAX_RETRIES} attempts.")
+    return None
 
 
 def refresh_access_token(refresh_token):

@@ -7,7 +7,7 @@ normalized PyTorch tensors of shape (B, C, H, W).
 
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 import h5py
 import numpy as np
 import torch
@@ -23,15 +23,158 @@ CHANNEL_CALIBRATION_BOUNDS = {
     "IMG_TIR2": {"min": 180.0, "max": 330.0, "unit": "Kelvin", "type": "temperature"},
 }
 
+# Physical geographic bounding boxes and pixel indices for rapid sector extraction on Level-1B grid
+REGIONAL_SECTOR_CROP_INDICES = {
+    "indian_subcontinent": {"slice": (532, 1272, 943, 1888), "default_bounds": {"latNorth": 35.51, "latSouth": 4.97, "lonWest": 60.32, "lonEast": 105.02}},
+    "bay_of_bengal": {"slice": (824, 1190, 1348, 1755), "default_bounds": {"latNorth": 22.13, "latSouth": 7.97, "lonWest": 79.87, "lonEast": 96.06}},
+    "arabian_sea": {"slice": (776, 1192, 821, 1278), "default_bounds": {"latNorth": 24.41, "latSouth": 7.91, "lonWest": 57.57, "lonEast": 77.44}},
+    "western_ghats": {"slice": (874, 1176, 1144, 1287), "default_bounds": {"latNorth": 20.04, "latSouth": 8.49, "lonWest": 71.92, "lonEast": 77.76}},
+    "himalayan_foothills": {"slice": (573, 730, 1207, 1598), "default_bounds": {"latNorth": 33.06, "latSouth": 25.96, "lonWest": 73.34, "lonEast": 90.65}},
+}
+
 
 class MOSDACParser:
     """
     Parser for MOSDAC Earth Observation INSAT-3DS / INSAT-3DR HDF5 and NetCDF4 radiance data.
-    Implements physical calibration table extraction and GeoTIFF export.
+    Implements physical calibration table extraction, exact coordinate mapping, and GeoTIFF export.
     """
 
     def __init__(self, channels: Optional[List[str]] = None):
         self.channels = channels or ["IMG_VIS", "IMG_WV", "IMG_TIR1"]
+
+    @staticmethod
+    def extract_geospatial_metadata(filepath: Union[str, Path]) -> Dict[str, Any]:
+        """
+        Extracts real geospatial extent and observation attributes from an HDF5 file.
+        """
+        filepath = Path(filepath)
+        if not filepath.exists():
+            raise FileNotFoundError(f"File not found: {filepath}")
+
+        meta = {
+            "satellite_name": "INSAT-3DS",
+            "latNorth": 81.04,
+            "latSouth": -81.04,
+            "lonWest": 0.84,
+            "lonEast": 163.16,
+            "acquisition_date": "",
+            "acquisition_time_gmt": "",
+        }
+
+        try:
+            with h5py.File(filepath, "r") as h5:
+                if "upper_latitude" in h5.attrs:
+                    meta["latNorth"] = float(h5.attrs["upper_latitude"][0])
+                if "lower_latitude" in h5.attrs:
+                    meta["latSouth"] = float(h5.attrs["lower_latitude"][0])
+                if "left_longitude" in h5.attrs:
+                    meta["lonWest"] = float(h5.attrs["left_longitude"][0])
+                if "right_longitude" in h5.attrs:
+                    meta["lonEast"] = float(h5.attrs["right_longitude"][0])
+                if "Satellite_Name" in h5.attrs:
+                    sat = h5.attrs["Satellite_Name"]
+                    meta["satellite_name"] = sat.decode("utf-8") if isinstance(sat, bytes) else str(sat)
+                if "Acquisition_Date" in h5.attrs:
+                    dt = h5.attrs["Acquisition_Date"]
+                    meta["acquisition_date"] = dt.decode("utf-8") if isinstance(dt, bytes) else str(dt)
+                if "Acquisition_Time_in_GMT" in h5.attrs:
+                    tm = h5.attrs["Acquisition_Time_in_GMT"]
+                    meta["acquisition_time_gmt"] = tm.decode("utf-8") if isinstance(tm, bytes) else str(tm)
+        except Exception:
+            pass
+
+        return meta
+
+    def read_hdf5_sector(
+        self,
+        filepath: Union[str, Path],
+        region: Optional[str] = "indian_subcontinent",
+        target_size: Optional[Tuple[int, int]] = (512, 512),
+    ) -> Tuple[Dict[str, np.ndarray], Dict[str, float]]:
+        """
+        Directly reads a high-resolution geographic sector from an INSAT-3DS HDF5 file
+        using precise geographic coordinate slices. Avoids full-disk RAM overhead.
+
+        Returns:
+            Tuple of (extracted_channels_dict, actual_geo_bounds_dict)
+        """
+        filepath = Path(filepath)
+        if not filepath.exists():
+            raise FileNotFoundError(f"MOSDAC file not found: {filepath}")
+
+        extracted_channels = {}
+        geo_bounds = {"latNorth": 35.51, "latSouth": 4.97, "lonWest": 60.32, "lonEast": 105.02}
+
+        with h5py.File(filepath, "r") as h5_file:
+            crop_info = REGIONAL_SECTOR_CROP_INDICES.get(region or "indian_subcontinent")
+
+            if crop_info and "Latitude" in h5_file and "Longitude" in h5_file:
+                y0, y1, x0, x1 = crop_info["slice"]
+                geo_bounds = crop_info["default_bounds"].copy()
+
+                # Extract precise coordinates if arrays present
+                try:
+                    sub_lat = np.array(h5_file["Latitude"][y0:y1, x0:x1], dtype=np.float32) * 0.01
+                    sub_lon = np.array(h5_file["Longitude"][y0:y1, x0:x1], dtype=np.float32) * 0.01
+                    val_mask = (sub_lat > -80.0) & (sub_lat < 80.0) & (sub_lon > 0.0) & (sub_lon < 180.0)
+                    if np.any(val_mask):
+                        geo_bounds["latNorth"] = round(float(np.max(sub_lat[val_mask])), 2)
+                        geo_bounds["latSouth"] = round(float(np.min(sub_lat[val_mask])), 2)
+                        geo_bounds["lonWest"] = round(float(np.min(sub_lon[val_mask])), 2)
+                        geo_bounds["lonEast"] = round(float(np.max(sub_lon[val_mask])), 2)
+                except Exception:
+                    pass
+
+                for ch in self.channels:
+                    raw_slice = None
+                    if ch in h5_file:
+                        ds = h5_file[ch]
+                        if ch == "IMG_VIS" and ds.ndim == 3 and ds.shape[1] > 5000:
+                            # 1km visible channel is 4x resolution
+                            raw_slice = np.squeeze(np.array(ds[0, y0 * 4 : y1 * 4, x0 * 4 : x1 * 4], dtype=np.float32))
+                        elif ds.ndim == 3:
+                            raw_slice = np.squeeze(np.array(ds[0, y0:y1, x0:x1], dtype=np.float32))
+                        elif ds.ndim == 2:
+                            raw_slice = np.squeeze(np.array(ds[y0:y1, x0:x1], dtype=np.float32))
+
+                    if raw_slice is None:
+                        # Fallback to key search
+                        for key in h5_file.keys():
+                            if ch.lower() in key.lower() and not key.endswith("_TEMP") and not key.endswith("_RADIANCE"):
+                                ds = h5_file[key]
+                                if ds.ndim == 3:
+                                    raw_slice = np.squeeze(np.array(ds[0, y0:y1, x0:x1], dtype=np.float32))
+                                elif ds.ndim == 2:
+                                    raw_slice = np.squeeze(np.array(ds[y0:y1, x0:x1], dtype=np.float32))
+                                break
+
+                    if raw_slice is None:
+                        # Generate zeros if band not present
+                        raw_slice = np.zeros((y1 - y0, x1 - x0), dtype=np.float32)
+
+                    # Thermal Temperature Calibration via embedded LUT
+                    temp_lut_key = f"{ch}_TEMP"
+                    if temp_lut_key in h5_file:
+                        try:
+                            lut = np.array(h5_file[temp_lut_key], dtype=np.float32)
+                            valid_indices = (raw_slice >= 0) & (raw_slice < len(lut))
+                            calibrated = np.full_like(raw_slice, 280.0, dtype=np.float32)
+                            calibrated[valid_indices] = lut[raw_slice[valid_indices].astype(int)]
+                        except Exception:
+                            calibrated = self._calibrate_channel(raw_slice, ch)
+                    else:
+                        calibrated = self._calibrate_channel(raw_slice, ch)
+
+                    if target_size is not None and calibrated.shape != target_size:
+                        calibrated = self._resample_array(calibrated, target_size)
+
+                    extracted_channels[ch] = calibrated
+
+                return extracted_channels, geo_bounds
+
+        # Fallback to full file read if no sector slice matched
+        data = self.read_hdf5(filepath, target_size=target_size)
+        return data, geo_bounds
 
     def read_hdf5(
         self,
@@ -67,14 +210,14 @@ class MOSDACParser:
                 ]
                 for key in candidate_keys:
                     if key in h5_file:
-                        raw_data = np.array(h5_file[key], dtype=np.float32)
+                        raw_data = np.squeeze(np.array(h5_file[key], dtype=np.float32))
                         break
 
                 if raw_data is None:
                     # If specific channel is missing, check if keys match partially
                     for key in h5_file.keys():
                         if ch.lower() in key.lower():
-                            raw_data = np.array(h5_file[key], dtype=np.float32)
+                            raw_data = np.squeeze(np.array(h5_file[key], dtype=np.float32))
                             break
 
                 if raw_data is None:
@@ -97,7 +240,7 @@ class MOSDACParser:
         bounds = CHANNEL_CALIBRATION_BOUNDS.get(
             channel_name, {"min": 0.0, "max": 1.0, "type": "generic"}
         )
-        data = raw_data.copy()
+        data = np.squeeze(raw_data).copy()
 
         # Handle fill values
         fill_mask = (data < -900) | np.isnan(data) | np.isinf(data)
@@ -118,11 +261,14 @@ class MOSDACParser:
         Interpolates 2D array to target (height, width) using bilinear interpolation.
         """
         h, w = target_size
-        tensor = torch.from_numpy(arr).unsqueeze(0).unsqueeze(0)
+        arr = np.squeeze(arr)
+        tensor = torch.from_numpy(arr).float()
+        while tensor.dim() < 4:
+            tensor = tensor.unsqueeze(0)
         resampled = torch.nn.functional.interpolate(
-            tensor, size=(h, w), mode="bilinear", align_corners=True
+            tensor, size=(h, w), mode="bilinear", align_corners=False
         )
-        return resampled.squeeze(0).squeeze(0).numpy()
+        return resampled.squeeze().numpy()
 
     def to_normalized_tensor(
         self,
@@ -151,6 +297,18 @@ class MOSDACParser:
 
             stacked.append(norm)
 
+        # Align shapes if channels have different resolutions (e.g., VIS vs TIR1)
+        ref_shape = stacked[0].shape
+        for i in range(len(stacked)):
+            if stacked[i].shape != ref_shape:
+                t_arr = torch.from_numpy(stacked[i]).float()
+                while t_arr.dim() < 4:
+                    t_arr = t_arr.unsqueeze(0)
+                resampled = torch.nn.functional.interpolate(
+                    t_arr, size=ref_shape, mode="bilinear", align_corners=False
+                )
+                stacked[i] = resampled.squeeze().numpy()
+
         tensor_np = np.stack(stacked, axis=0)  # Shape (C, H, W)
         tensor = torch.from_numpy(tensor_np).unsqueeze(0).float().to(device)  # Shape (1, C, H, W)
         return tensor
@@ -159,6 +317,48 @@ class MOSDACParser:
         self,
         tensor: torch.Tensor,
     ) -> Dict[str, np.ndarray]:
+        """
+        Converts normalized tensor (1, C, H, W) back to physical calibrated units per channel.
+        """
+        tensor_cpu = tensor.detach().cpu().squeeze(0).numpy()
+        result = {}
+        for i, ch in enumerate(self.channels):
+            bounds = CHANNEL_CALIBRATION_BOUNDS.get(ch, {"min": 0.0, "max": 1.0, "type": "generic"})
+            c_min = bounds["min"]
+            c_max = bounds["max"]
+            arr = tensor_cpu[i]
+
+            if bounds.get("type") == "temperature":
+                arr = 1.0 - arr
+
+            physical = arr * (c_max - c_min) + c_min
+            result[ch] = physical
+        return result
+
+    def save_processed_data(
+        self,
+        filepath: Union[str, Path],
+        channel_data: Dict[str, np.ndarray],
+    ) -> Path:
+        """
+        Saves processed multi-spectral channel arrays as a compressed NumPy archive.
+        Saves significant space compared to raw HDF5 granules.
+        """
+        filepath = Path(filepath)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(filepath, **channel_data)
+        return filepath
+
+    def load_processed_data(self, filepath: Union[str, Path]) -> Dict[str, np.ndarray]:
+        """
+        Loads processed multi-spectral channel arrays from a compressed NumPy archive.
+        """
+        filepath = Path(filepath)
+        if not filepath.exists():
+            raise FileNotFoundError(f"Processed MOSDAC file not found: {filepath}")
+
+        with np.load(filepath) as data:
+            return {key: data[key] for key in data.files}
         """
         Converts normalized tensor (1, C, H, W) back to physical calibrated units per channel.
         """

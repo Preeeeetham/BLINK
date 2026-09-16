@@ -35,6 +35,7 @@ class InterpolationResult:
     channels: List[str]
     engine_mode: str
     flow_backend: str
+    geo_bounds: Optional[Dict[str, float]] = None
 
 
 class AeroInterpolator:
@@ -286,14 +287,17 @@ class AeroInterpolator:
         filepath_1: Union[str, Path],
         sub_timesteps: Optional[List[float]] = None,
         target_size: Optional[Tuple[int, int]] = (512, 512),
+        region: Optional[str] = "indian_subcontinent",
     ) -> InterpolationResult:
         """
         End-to-end interpolation directly from MOSDAC HDF5/NetCDF4 file paths.
         """
-        ch_data_0 = self.parser.read_hdf5(filepath_0, target_size=target_size)
-        ch_data_1 = self.parser.read_hdf5(filepath_1, target_size=target_size)
+        ch_data_0, geo_bounds = self.parser.read_hdf5_sector(filepath_0, region=region, target_size=target_size)
+        ch_data_1, _ = self.parser.read_hdf5_sector(filepath_1, region=region, target_size=target_size)
 
         tensor_0 = self.parser.to_normalized_tensor(ch_data_0, device=self.device)
         tensor_1 = self.parser.to_normalized_tensor(ch_data_1, device=self.device)
 
-        return self.interpolate(tensor_0, tensor_1, sub_timesteps=sub_timesteps)
+        result = self.interpolate(tensor_0, tensor_1, sub_timesteps=sub_timesteps)
+        result.geo_bounds = geo_bounds
+        return result

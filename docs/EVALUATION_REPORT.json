@@ -1,0 +1,212 @@
+{
+  "project": "BLINK",
+  "audit_timestamp_iso": "2026-09-16T17:40:00Z",
+  "scientific_standards": [
+    "IMD Operational Standards",
+    "ISRO SAC NETRA (2017)",
+    "WMO Verification Guidelines"
+  ],
+  "evaluations": [
+    {
+      "dataset_name": "MOSDAC INSAT-3DS Imager L1B Standard",
+      "data_tier": "OBSERVED",
+      "files_ingested": [
+        "3SIMG_30AUG2026_2300_L1B_STD_V01R00.h5",
+        "3SIMG_30AUG2026_2330_L1B_STD_V01R00.h5"
+      ],
+      "scan_cadence_minutes": 30.0,
+      "operating_mode": "TEMPORAL_INTERPOLATION",
+      "independent_ground_truth_available": false,
+      "ground_truth_absence_reason": "Consecutive observations are separated by 30 min (23:00 to 23:30 UTC). No intermediate 23:15 UTC observation exists in local archive. Quantitative validation metrics (PSNR, SSIM, RMSE) are strictly suppressed to prevent circular evaluation.",
+      "validation_metrics": {
+        "psnr_db": null,
+        "ssim": null,
+        "rmse_k": null
+      },
+      "internal_physical_diagnostics": {
+        "flux_conservation_pct": 99.99,
+        "physical_bt_compliance_pct": 100.0,
+        "mean_bt_drift_k": 0.0,
+        "fluid_divergence": 0.001202,
+        "mean_latency_ms": 2307.78
+      },
+      "convective_indicators": {
+        "convective_activity_index": 100.0,
+        "convective_activity_level": "SEVERE_CONVECTIVE_UPDRAFT",
+        "is_calibrated_probability": false,
+        "cloud_top_bt_tendency_k_15m": -41.3,
+        "experimental_ot_candidates_count": 40,
+        "precipitation_ground_truth_status": "UNVALIDATED_NO_SURFACE_RADAR"
+      }
+    },
+    {
+      "dataset_name": "Continuous Atmospheric Simulation (Cyclone Scenario)",
+      "data_tier": "MODEL OUTPUT / SYNTHETIC DEMONSTRATION",
+      "operating_mode": "TEMPORAL_INTERPOLATION",
+      "independent_ground_truth_available": true,
+      "sample_count_n": 14,
+      "aggregate_scorecard": {
+        "mean_blink_psnr_db": 25.07,
+        "mean_linear_blend_psnr_db": 24.4,
+        "mean_persistence_psnr_db": 20.24,
+        "mean_psnr_advantage_over_linear_db": 0.67
+      },
+      "horizon_breakdown": [
+        {
+          "horizon_minutes": 1.0,
+          "normalized_t": 0.0667,
+          "blink_psnr_db": 28.05,
+          "linear_blend_psnr_db": 27.23,
+          "persistence_psnr_db": 26.92,
+          "psnr_gain_over_linear_db": 0.82,
+          "blink_ssim": 0.7987,
+          "linear_ssim": 0.7834,
+          "persistence_ssim": 0.782
+        },
+        {
+          "horizon_minutes": 2.0,
+          "normalized_t": 0.1333,
+          "blink_psnr_db": 26.17,
+          "linear_blend_psnr_db": 25.36,
+          "persistence_psnr_db": 24.69,
+          "psnr_gain_over_linear_db": 0.81,
+          "blink_ssim": 0.7328,
+          "linear_ssim": 0.7123,
+          "persistence_ssim": 0.7088
+        },
+        {
+          "horizon_minutes": 3.0,
+          "normalized_t": 0.2,
+          "blink_psnr_db": 25.19,
+          "linear_blend_psnr_db": 24.41,
+          "persistence_psnr_db": 23.34,
+          "psnr_gain_over_linear_db": 0.78,
+          "blink_ssim": 0.7087,
+          "linear_ssim": 0.6732,
+          "persistence_ssim": 0.6652
+        },
+        {
+          "horizon_minutes": 4.0,
+          "normalized_t": 0.2667,
+          "blink_psnr_db": 24.33,
+          "linear_blend_psnr_db": 23.61,
+          "persistence_psnr_db": 22.1,
+          "psnr_gain_over_linear_db": 0.72,
+          "blink_ssim": 0.6813,
+          "linear_ssim": 0.6456,
+          "persistence_ssim": 0.631
+        },
+        {
+          "horizon_minutes": 5.0,
+          "normalized_t": 0.3333,
+          "blink_psnr_db": 23.78,
+          "linear_blend_psnr_db": 23.16,
+          "persistence_psnr_db": 21.14,
+          "psnr_gain_over_linear_db": 0.62,
+          "blink_ssim": 0.664,
+          "linear_ssim": 0.6316,
+          "persistence_ssim": 0.6067
+        },
+        {
+          "horizon_minutes": 6.0,
+          "normalized_t": 0.4,
+          "blink_psnr_db": 23.53,
+          "linear_blend_psnr_db": 22.95,
+          "persistence_psnr_db": 20.43,
+          "psnr_gain_over_linear_db": 0.58,
+          "blink_ssim": 0.6572,
+          "linear_ssim": 0.6299,
+          "persistence_ssim": 0.5978
+        },
+        {
+          "horizon_minutes": 7.0,
+          "normalized_t": 0.4667,
+          "blink_psnr_db": 23.48,
+          "linear_blend_psnr_db": 22.86,
+          "persistence_psnr_db": 19.79,
+          "psnr_gain_over_linear_db": 0.62,
+          "blink_ssim": 0.6592,
+          "linear_ssim": 0.627,
+          "persistence_ssim": 0.5851
+        },
+        {
+          "horizon_minutes": 8.0,
+          "normalized_t": 0.5333,
+          "blink_psnr_db": 23.53,
+          "linear_blend_psnr_db": 22.93,
+          "persistence_psnr_db": 19.25,
+          "psnr_gain_over_linear_db": 0.6,
+          "blink_ssim": 0.6615,
+          "linear_ssim": 0.6303,
+          "persistence_ssim": 0.5821
+        },
+        {
+          "horizon_minutes": 9.0,
+          "normalized_t": 0.6,
+          "blink_psnr_db": 23.77,
+          "linear_blend_psnr_db": 23.12,
+          "persistence_psnr_db": 18.73,
+          "psnr_gain_over_linear_db": 0.65,
+          "blink_ssim": 0.6736,
+          "linear_ssim": 0.6348,
+          "persistence_ssim": 0.5773
+        },
+        {
+          "horizon_minutes": 10.0,
+          "normalized_t": 0.6667,
+          "blink_psnr_db": 24.13,
+          "linear_blend_psnr_db": 23.46,
+          "persistence_psnr_db": 18.25,
+          "psnr_gain_over_linear_db": 0.67,
+          "blink_ssim": 0.6823,
+          "linear_ssim": 0.6454,
+          "persistence_ssim": 0.5708
+        },
+        {
+          "horizon_minutes": 11.0,
+          "normalized_t": 0.7333,
+          "blink_psnr_db": 24.7,
+          "linear_blend_psnr_db": 23.96,
+          "persistence_psnr_db": 17.78,
+          "psnr_gain_over_linear_db": 0.74,
+          "blink_ssim": 0.7054,
+          "linear_ssim": 0.6669,
+          "persistence_ssim": 0.5579
+        },
+        {
+          "horizon_minutes": 12.0,
+          "normalized_t": 0.8,
+          "blink_psnr_db": 25.36,
+          "linear_blend_psnr_db": 24.71,
+          "persistence_psnr_db": 17.36,
+          "psnr_gain_over_linear_db": 0.65,
+          "blink_ssim": 0.7205,
+          "linear_ssim": 0.6942,
+          "persistence_ssim": 0.5504
+        },
+        {
+          "horizon_minutes": 13.0,
+          "normalized_t": 0.8667,
+          "blink_psnr_db": 26.42,
+          "linear_blend_psnr_db": 25.92,
+          "persistence_psnr_db": 16.95,
+          "psnr_gain_over_linear_db": 0.5,
+          "blink_ssim": 0.7534,
+          "linear_ssim": 0.7407,
+          "persistence_ssim": 0.5415
+        },
+        {
+          "horizon_minutes": 14.0,
+          "normalized_t": 0.9333,
+          "blink_psnr_db": 28.47,
+          "linear_blend_psnr_db": 27.9,
+          "persistence_psnr_db": 16.6,
+          "psnr_gain_over_linear_db": 0.57,
+          "blink_ssim": 0.8167,
+          "linear_ssim": 0.8125,
+          "persistence_ssim": 0.537
+        }
+      ]
+    }
+  ]
+}
